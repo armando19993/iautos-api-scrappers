@@ -15,9 +15,11 @@ app = FastAPI(
 )
 
 
-class PlacaRequest(BaseModel):
+class SoatRequest(BaseModel):
     placa: str
+    vehiculoId: int
     use_proxy: bool = False
+    headless: bool = True
 
 
 @app.get("/")
@@ -37,7 +39,7 @@ def health():
 
 
 @app.post("/soat")
-def soat_sync(req: PlacaRequest):
+def soat_sync(req: SoatRequest):
     """Modo sincrono: bloquea hasta tener el resultado del SOAT y lo retorna.
     Tambien envia el resultado al webhook.site.
     """
@@ -45,22 +47,22 @@ def soat_sync(req: PlacaRequest):
     if not placa:
         raise HTTPException(status_code=400, detail="placa requerida")
 
-    scraper = SOATScraper(use_proxy=req.use_proxy)
+    scraper = SOATScraper(use_proxy=req.use_proxy, headless=req.headless)
     scraper.start()
     try:
         result = scraper.consultar_soat(placa)
         if not result.get("placa"):
             result["placa"] = placa
+        result["vehiculoId"] = req.vehiculoId
     finally:
         scraper.stop()
 
-    # enviar al webhook en el mismo request (sync)
     result["webhook"] = send_to_webhook(result)
     return result
 
 
 @app.post("/soat/async")
-def soat_async(req: PlacaRequest, bg: BackgroundTasks):
+def soat_async(req: SoatRequest, bg: BackgroundTasks):
     """Modo asincrono: responde 202 inmediatamente. El scraper corre en una
     tarea en segundo plano; al terminar envia el resultado al webhook.site.
     """
@@ -68,36 +70,36 @@ def soat_async(req: PlacaRequest, bg: BackgroundTasks):
     if not placa:
         raise HTTPException(status_code=400, detail="placa requerida")
 
-    bg.add_task(_run_async_task, placa, req.use_proxy)
-    return {"status": "accepted", "placa": placa, "webhook": "se enviara al terminar"}
+    bg.add_task(_run_async_task, placa, req.vehiculoId, req.use_proxy, req.headless)
+    return {"status": "accepted", "placa": placa, "vehiculoId": req.vehiculoId, "webhook": "se enviara al terminar"}
 
 
 @app.get("/soat/{placa}")
-def soat_sync_get(placa: str, use_proxy: bool = False):
+def soat_sync_get(placa: str, vehiculoId: int, use_proxy: bool = False, headless: bool = True):
     """Atajo GET para probar rapido desde el navegador.
-    Ej: GET /soat/ABC123
+    Ej: GET /soat/ABC123?vehiculoId=42
     """
-    return soat_sync(PlacaRequest(placa=placa, use_proxy=use_proxy))
+    return soat_sync(SoatRequest(placa=placa, vehiculoId=vehiculoId, use_proxy=use_proxy, headless=headless))
 
 
-def _run_async_task(placa: str, use_proxy: bool):
+def _run_async_task(placa: str, vehiculoId: int, use_proxy: bool, headless: bool = True):
     """Corre el scraper en un hilo separado (FastAPI BackgroundTasks es async;
     el scraper usa undetected-chromedriver que es bloqueante) y envia al webhook."""
     def _work():
-        scraper = SOATScraper(use_proxy=use_proxy)
+        scraper = SOATScraper(use_proxy=use_proxy, headless=headless)
         scraper.start()
         try:
             result = scraper.consultar_soat(placa)
             if not result.get("placa"):
                 result["placa"] = placa
+            result["vehiculoId"] = vehiculoId
         except Exception as e:
-            result = {"placa": placa, "success": False, "error": str(e)}
+            result = {"placa": placa, "vehiculoId": vehiculoId, "success": False, "error": str(e)}
         finally:
             scraper.stop()
         result["webhook"] = send_to_webhook(result)
-        print(f"[async] placa={placa} success={result.get('success')} webhook={result['webhook']}")
+        print(f"[async] placa={placa} vehiculoId={vehiculoId} success={result.get('success')} webhook={result['webhook']}")
 
-    # aislar el Chrome bloqueante en su propio hilo
     t = threading.Thread(target=_work, daemon=True)
     t.start()
 

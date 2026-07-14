@@ -180,8 +180,9 @@ class SOATScraper:
     LOCAL_PROXY_PORT = 18080
     TURNSTILE_SITEKEY = "0x4AAAAAADyJA_4hEDeVktbR"
 
-    def __init__(self, use_proxy=False):
+    def __init__(self, use_proxy=False, headless=False):
         self.use_proxy = use_proxy
+        self.headless = headless
         self.proxy_index = 0
         self.current_proxy = None
         self.solver = None
@@ -252,6 +253,12 @@ class SOATScraper:
         options.add_argument("--disable-web-security")
         options.add_argument("--ignore-certificate-errors")
         options.add_argument("--window-size=1280,800")
+        # Modo headless para servidores Linux sin GUI
+        if self.headless:
+            options.add_argument("--headless=new")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--hide-scrollbars")
+            options.add_argument("--blink-settings=imagesEnabled=true")
         # Desactivar servicios de Chrome que generan ruido de red (no los queremos por proxy)
         options.add_argument("--disable-background-networking")
         options.add_argument("--disable-component-update")
@@ -431,14 +438,31 @@ class SOATScraper:
             print(f"[*] CAPTCHA capturado via screenshot ({len(img_bytes)} bytes)")
         return self.solver.solve_image_captcha(img_b64)
 
-    def consultar_soat(self, placa, max_retries=2):
+    def consultar_soat(self, placa, max_retries=0, retry_delay=5):
+        """Consulta el SOAT. Reintenta indefinidamente hasta obtener success=True.
+        max_retries=0 significa reintentar para siempre. Pausa retry_delay segundos
+        entre intentos. Crea un driver nuevo cada few intentos para evitar sesion
+        stale.
+        """
         print(f"\n{'='*50}")
         print(f"[*] Consultando SOAT para placa: {placa}")
         print(f"{'='*50}")
 
-        for attempt in range(max_retries):
+        attempt = 0
+        while max_retries == 0 or attempt < max_retries:
+            attempt += 1
             try:
-                if attempt > 0 and self.use_proxy:
+                # recrear driver cada 5 intentos para evitar sesion stale
+                if attempt > 1 and (attempt - 1) % 5 == 0:
+                    print(f"[*] Recreando driver (intento {attempt})...")
+                    try:
+                        self.driver.quit()
+                    except Exception:
+                        pass
+                    self.driver = None
+                    self.start()
+
+                if attempt > 1 and self.use_proxy:
                     self._rotate_proxy()
 
                 self.driver.get(BASE_URL)
@@ -460,6 +484,7 @@ class SOATScraper:
 
                 if not self._solve_turnstile():
                     print("[!] No se pudo resolver Turnstile; reintentando")
+                    time.sleep(retry_delay)
                     continue
                 time.sleep(2)
 
@@ -485,14 +510,13 @@ class SOATScraper:
                 result = self._extract_result(pre_body)
                 if result.get("success"):
                     return result
-                print(f"[!] Intento {attempt + 1} falló")
+                print(f"[!] Intento {attempt} falló: {result.get('error', '')[:80]}")
             except Exception as e:
-                print(f"[!] Intento {attempt + 1} error: {e}")
-                if attempt < max_retries - 1:
-                    print("[*] Reintentando...")
-                    time.sleep(2)
+                print(f"[!] Intento {attempt} error: {e}")
+            print(f"[*] Reintentando en {retry_delay}s... (intento {attempt})")
+            time.sleep(retry_delay)
 
-        return {"success": False, "error": "Todos los intentos fallaron"}
+        return {"success": False, "error": f"Todos los intentos fallaron ({attempt})"}
 
     def _rotate_proxy(self):
         self.current_proxy = self._get_next_proxy()
@@ -507,6 +531,8 @@ class SOATScraper:
         - si OK: hace fetch a /api/login, /api/certificados, guarda en localStorage["certificados"]
           y navega via Vue router a /resultados (URL del iframe cambia).
         Estrategia: leer localStorage["certificados"] (mas fiable que el DOM).
+        Selecciona el SOAT mas reciente (VIGENTE > FechaInicio mas alta).
+        Captura un screenshot en base64 de la pantalla de resultados.
         """
         deadline = time.time() + timeout
         last_body = pre_submit_body or ""
@@ -522,7 +548,9 @@ class SOATScraper:
                         "error consultando", "el servicio de captcha", "no se encuentra"]:
                 if ind in low:
                     html = self.driver.page_source
+                    screenshot_b64 = self._capturar_screenshot()
                     return {"success": False, "error": body[:1000],
+                            "screenshot_base64": screenshot_b64,
                             "raw_html": html[:3000]}
             # 2) leer certificados del localStorage (el SPA los guarda ahi)
             try:
@@ -543,8 +571,13 @@ class SOATScraper:
                     placa_val = cert[0].get("Placa", "") if isinstance(cert, list) and cert else ""
                 except Exception:
                     pass
-                return {"success": True, "placa": placa_val, "certificados": cert,
-                        "raw_text": body[:2000]}
+                # seleccionar el SOAT mas reciente: VIGENTE > FechaInicio mas alta
+                soat_reciente = self._seleccionar_mas_reciente(cert)
+                # capturar screenshot de la pagina de resultados
+                screenshot_b64 = self._capturar_screenshot()
+                return {"success": True, "placa": placa_val,
+                        "soat": soat_reciente,
+                        "screenshot_base64": screenshot_b64}
             # 3) si el body cambio drasticamente (navego a /resultados)
             if pre_submit_body and body and body != pre_submit_body:
                 if any(k in low for k in ["vigente", "aseguradora", "certificado",
@@ -553,16 +586,84 @@ class SOATScraper:
                     print(f"\n[*] Respuesta (DOM):\n{body[:800]}")
                     success = not any(ind in low for ind in
                                       ["no se encontr", "no existe", "error consultando"])
+                    screenshot_b64 = self._capturar_screenshot()
                     return {"success": success, "raw_text": body[:2000],
                             "raw_html": html[:5000],
+                            "screenshot_base64": screenshot_b64,
                             "error": None if success else body[:1000]}
             last_body = body
             time.sleep(1)
         html = self.driver.page_source
         print(f"\n[*] Estado final iframe:\n{last_body[:600]}")
+        screenshot_b64 = self._capturar_screenshot()
         return {"success": False,
                 "error": "Sin respuesta del servidor (posible captcha incorrecto)",
+                "screenshot_base64": screenshot_b64,
                 "raw_text": last_body[:1000], "raw_html": html[:3000]}
+
+    def _seleccionar_mas_reciente(self, certificados):
+        """De la lista de certificados, retornar el mas reciente:
+        prioridad: Estado=VIGENTE, luego FechaInicio mas alta (dd/mm/yyyy).
+        """
+        if not isinstance(certificados, list) or not certificados:
+            return None
+
+        def parse_fecha(fecha_str):
+            if not fecha_str:
+                return ""
+            try:
+                d, m, y = fecha_str.split("/")
+                return f"{y.zfill(4)}{m.zfill(2)}{d.zfill(2)}"
+            except Exception:
+                return ""
+
+        vigentes = [c for c in certificados if (c.get("Estado") or "").upper() == "VIGENTE"]
+        if vigentes:
+            return max(vigentes, key=lambda c: parse_fecha(c.get("FechaInicio", "")))
+        # si no hay vigentes, el mas reciente por FechaInicio
+        try:
+            return max(certificados, key=lambda c: parse_fecha(c.get("FechaInicio", "")))
+        except Exception:
+            return certificados[0]
+
+    def _capturar_screenshot(self):
+        """Captura un screenshot del contenido del iframe de resultados.
+        Busca el contenedor principal del SOAT dentro del iframe y captura
+        ese elemento. Si no lo encuentra, captura el body del iframe.
+        """
+        try:
+            # intentar capturar el elemento principal de resultados dentro del iframe
+            selectors = [
+                "div.container",
+                "main",
+                ".resultado",
+                "[class*='result']",
+                "[class*='certific']",
+                ".card",
+                "article",
+            ]
+            element = None
+            for sel in selectors:
+                try:
+                    element = self.driver.find_element(By.CSS_SELECTOR, sel)
+                    if element.is_displayed():
+                        break
+                except Exception:
+                    continue
+            if element is None:
+                element = self.driver.find_element(By.TAG_NAME, "body")
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'start', behavior: 'instant'});",
+                element,
+            )
+            time.sleep(0.3)
+            png = element.screenshot_as_png()
+            b64 = base64.b64encode(png).decode("utf-8")
+            print(f"[*] Screenshot capturado ({len(png)} bytes base64={len(b64)} chars)")
+            return b64
+        except Exception as e:
+            print(f"[!] No se pudo capturar screenshot: {e}")
+            return ""
 
 
 def main():

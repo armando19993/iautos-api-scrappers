@@ -9,6 +9,7 @@ def main():
     parser.add_argument("--placas", type=str, help="Placas separadas por coma")
     parser.add_argument("--output", "-o", type=str, help="Archivo de salida JSON")
     parser.add_argument("--proxy", action="store_true", help="Usar proxy residencial CapSolver (por defecto OFF)")
+    parser.add_argument("--headless", action="store_true", help="Navegador headless (sin GUI, para servidores Linux)")
     args = parser.parse_args()
 
     placas = []
@@ -22,7 +23,7 @@ def main():
         print("     python main.py --placa ABC123 --proxy   # usar proxy residencial")
         return
 
-    scraper = SOATScraper(use_proxy=args.proxy)
+    scraper = SOATScraper(use_proxy=args.proxy, headless=args.headless)
     scraper.start()
 
     results = []

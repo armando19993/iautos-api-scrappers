@@ -1,0 +1,16 @@
+services:
+  soat-api:
+    build: .
+    container_name: soat-api
+    restart: unless-stopped
+    environment:
+      - CAPSOLVER_API_KEY=CAP-ED00676810599281FD08281DE8F067C0470247E8CA2A439C29EF35C651EC04BB
+    ports:
+      - "8000:8000"
+    shm_size: 512m
+    networks:
+      - proxy-net
+
+networks:
+  proxy-net:
+    external: true

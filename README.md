@@ -29,10 +29,17 @@ playwright install chromium
    ```bash
    copy .env.example .env
    ```
-3. Editar `.env` con tu API key:
+3. Editar `.env` con tu API key y datos de MariaDB:
    ```
    CAPSOLVER_API_KEY=CAP-XXXXX-tu-api-key
+   MARIADB_HOST=localhost
+   MARIADB_PORT=3306
+   MARIADB_USER=root
+   MARIADB_PASSWORD=tu_password
+   MARIADB_DATABASE=soat
    ```
+4. La API crea la tabla `soat_consultas` automaticamente al arrancar
+   (ver `db.py` para el esquema completo).
 
 ## Uso
 
