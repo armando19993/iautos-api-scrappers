@@ -36,8 +36,10 @@ playwright install chromium
 
 ## Uso
 
+### CLI
+
 ```bash
-# Consultar una placa
+# Consultar una placa (sin proxy, usa tu IP local)
 python main.py --placa ABC123
 
 # Consultar multiples placas
@@ -45,7 +47,50 @@ python main.py --placas ABC123,XYZ789,DEF456
 
 # Guardar en archivo especifico
 python main.py --placa ABC123 --output mi_archivo.json
+
+# Usar proxy residencial CapSolver (solo si tu IP es bloqueada por Cloudflare)
+python main.py --placa ABC123 --proxy
 ```
+
+### API (FastAPI)
+
+```bash
+# Iniciar el servidor
+python api.py
+# o: uvicorn api:app --host 0.0.0.0 --port 8000
+```
+
+Endpoints disponibles:
+
+| Metodo | Ruta                | Descripcion                                            |
+|--------|---------------------|--------------------------------------------------------|
+| GET    | `/`                 | Lista de endpoints                                     |
+| GET    | `/health`           | Estado del servicio                                    |
+| POST   | `/soat`             | Modo sincrono (espera ~30-40s y retorna el SOAT)       |
+| POST   | `/soat/async`       | Modo async (202 inmediato, corre en background)       |
+| GET    | `/soat/{placa}`     | Atajo sync desde el navegador                          |
+
+**POST /soat** (sincrono):
+```bash
+curl -X POST http://localhost:8000/soat \
+  -H "Content-Type: application/json" \
+  -d "{\"placa\":\"ABC123\"}"
+```
+
+**POST /soat/async** (background):
+```bash
+curl -X POST http://localhost:8000/soat/async \
+  -H "Content-Type: application/json" \
+  -d "{\"placa\":\"ABC123\"}"
+```
+
+Body:
+- `placa` (str, requerido): placa del vehiculo
+- `use_proxy` (bool, opcional, default false): usar proxy residencial CapSolver
+
+Ambos modos envian el resultado al webhook.site configurado en `webhook.py`.
+
+Docs interactivas: http://localhost:8000/docs
 
 ## Estructura
 

@@ -3,3 +3,5 @@ selenium
 httpx
 python-dotenv
 pproxy
+fastapi
+uvicorn[standard]
