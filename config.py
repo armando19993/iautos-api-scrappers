@@ -5,6 +5,8 @@ load_dotenv()
 
 CAPSOLVER_API_KEY = os.getenv("CAPSOLVER_API_KEY", "")
 BASE_URL = "https://www.apeseg.org.pe/consultas-soat/"
+MTC_BASE_URL = "https://rec.mtc.gob.pe"
+SUNARP_URL = "https://consultavehicular.sunarp.gob.pe"
 
 CAPSOLVER_PROXIES = [
     "proxy.capsolver.com:36583:A0475E74211D4969-resi-country_PE-rotate_0m-session_lh3uapO7oN:Meches1256",

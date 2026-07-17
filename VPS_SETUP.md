@@ -253,3 +253,8 @@ docker stats --no-stream
 - **Chrome en Docker**: el Dockerfile instala Chrome estable y sus deps. `undetected-chromedriver` descargara el ChromeDriver correspondiente automaticamente al arrancar.
 - **CapSolver**: la API key va en `docker-compose.yml` (environment). No la subas a git.
 - **Webhook**: el endpoint del webhook.site esta en `webhook.py`; cambialo si quieres otro destino.
+
+
+## 10. Deploy Produccion
+Comando 1:  scp -r C:\Users\Armando.Campos\Documents\Proyectos\Scrapper\soat-scraper\* root@200.234.233.170:/opt/soat-api/
+Comando 2:  cd /opt/soat-api && docker compose up -d --build

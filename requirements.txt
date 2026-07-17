@@ -5,3 +5,5 @@ python-dotenv
 pproxy
 fastapi
 uvicorn[standard]
+pytesseract
+Pillow

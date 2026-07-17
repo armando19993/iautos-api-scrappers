@@ -4,6 +4,7 @@ import random
 import select
 import socket
 import struct
+import subprocess
 import threading
 import time
 import undetected_chromedriver as uc
@@ -12,6 +13,24 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from captcha_solver import CaptchaSolver
 from config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES, BASE_URL
+
+
+def _detect_chrome_version():
+    """Detecta la version mayor de Chrome instalada."""
+    for cmd in (["google-chrome", "--version"], ["google-chrome-stable", "--version"],
+                ["/usr/bin/google-chrome", "--version"], ["chromium", "--version"]):
+        try:
+            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=5).decode()
+            import re
+            m = re.search(r"(\d+)\.\d+\.\d+\.\d+", out)
+            if m:
+                v = int(m.group(1))
+                print(f"[Chrome] Version detectada: {v}")
+                return v
+        except Exception:
+            pass
+    print("[Chrome] No se detecto version, usando 150 por defecto")
+    return 150
 
 
 class ProxyForwarder:
@@ -287,7 +306,7 @@ class SOATScraper:
         if not self.solver:
             self.solver = CaptchaSolver(CAPSOLVER_API_KEY, None)
 
-        self.driver = uc.Chrome(options=options)
+        self.driver = uc.Chrome(options=options, version_main=_detect_chrome_version())
         self.driver.execute_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => false });
         """)
@@ -301,7 +320,7 @@ class SOATScraper:
                 pass
             self.driver = None
 
-    def _wait_for_cloudflare(self, timeout=40):
+    def _wait_for_cloudflare(self, timeout=20):
         """Espera a que una Cloudflare Challenge interstitial desaparezca (en pagina principal o iframe)."""
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -309,18 +328,18 @@ class SOATScraper:
                 title = (self.driver.title or "").lower()
                 body = self.driver.find_element(By.TAG_NAME, "body").text.lower()[:200]
             except Exception:
-                time.sleep(2)
+                time.sleep(0.5)
                 continue
             if "just a moment" in title or "just a moment" in body or "checking your browser" in body or "cloudflare" in body and "ray id" in body:
                 print(f"[*] Cloudflare Challenge activa, esperando... (title={title[:40]})")
-                time.sleep(3)
+                time.sleep(1)
                 continue
             return True
         return False
 
     def _switch_to_iframe(self):
         self._wait_for_cloudflare()
-        WebDriverWait(self.driver, 30).until(
+        WebDriverWait(self.driver, 20).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "iframe[src*='webapp.apeseg.org.pe']"))
         )
         iframe = self.driver.find_element(By.CSS_SELECTOR, "iframe[src*='webapp.apeseg.org.pe']")
@@ -339,7 +358,7 @@ class SOATScraper:
         sitekey = self.TURNSTILE_SITEKEY
 
         # 1) Esperar a que el contenedor de Turnstile exista
-        for _ in range(15):
+        for _ in range(10):
             try:
                 if self.driver.execute_script(
                     "return !!document.querySelector('#turnstile-container iframe, [name=\"cf-turnstile-response\"]')"
@@ -347,7 +366,7 @@ class SOATScraper:
                     break
             except Exception:
                 pass
-            time.sleep(1)
+            time.sleep(0.5)
 
         # 2) Si Turnstile auto-resolvió (token ya presente), usar ese
         try:
@@ -409,7 +428,7 @@ class SOATScraper:
             return False
 
     def _solve_image_captcha(self):
-        time.sleep(2)
+        time.sleep(0.5)
         captcha_img = None
         try:
             captcha_img = self.driver.find_element(By.CSS_SELECTOR, ".captcha-container img")
@@ -438,44 +457,50 @@ class SOATScraper:
             print(f"[*] CAPTCHA capturado via screenshot ({len(img_bytes)} bytes)")
         return self.solver.solve_image_captcha(img_b64)
 
-    def consultar_soat(self, placa, max_retries=0, retry_delay=5):
-        """Consulta el SOAT. Reintenta indefinidamente hasta obtener success=True.
-        max_retries=0 significa reintentar para siempre. Pausa retry_delay segundos
-        entre intentos. Crea un driver nuevo cada few intentos para evitar sesion
-        stale.
+    def consultar_soat(self, placa, retry_delay=5, max_attempts=10):
+        """Consulta el SOAT. Reintenta en batches de 5:
+        - 5 intentos con el mismo driver
+        - si fallan, cierra el driver, abre uno nuevo y repite.
+        Maximo max_attempts intentos totales.
         """
+        t_start = time.time()
         print(f"\n{'='*50}")
         print(f"[*] Consultando SOAT para placa: {placa}")
         print(f"{'='*50}")
 
         attempt = 0
-        while max_retries == 0 or attempt < max_retries:
+        while attempt < max_attempts:
             attempt += 1
+            t_attempt = time.time()
             try:
-                # recrear driver cada 5 intentos para evitar sesion stale
+                # cada 5 intentos: cerrar driver y abrir uno nuevo
                 if attempt > 1 and (attempt - 1) % 5 == 0:
-                    print(f"[*] Recreando driver (intento {attempt})...")
-                    try:
-                        self.driver.quit()
-                    except Exception:
-                        pass
+                    print(f"[*] Cerrando driver (intento {attempt}, batch {(attempt-1)//5+1})...")
+                    self.stop()
                     self.driver = None
+
+                # si no hay driver, crearlo
+                if self.driver is None:
+                    print(f"[*] Creando nuevo driver...")
                     self.start()
+
+                # si sigue siendo None, la creacion fallo
+                if self.driver is None:
+                    print("[!] No se pudo crear el driver, reintentando...")
+                    time.sleep(retry_delay)
+                    continue
 
                 if attempt > 1 and self.use_proxy:
                     self._rotate_proxy()
 
                 self.driver.get(BASE_URL)
-                time.sleep(5)
+                self._wait_for_cloudflare()
                 title = (self.driver.title or "").lower()
-                if "just a moment" in title:
-                    print(f"[*] Cloudflare challenge en pagina principal, esperando...")
-                    self._wait_for_cloudflare()
-                elif "error" in title or "bad gateway" in title or not title:
+                if "error" in title or "bad gateway" in title or not title:
                     print(f"[!] Pagina no cargo OK (title={title!r}). Posible 502/proxy.")
-                print("[*] Página principal cargada")
+                print(f"[*] Pagina principal cargada ({time.time()-t_attempt:.1f}s)")
                 self._switch_to_iframe()
-                time.sleep(2)
+                time.sleep(0.5)
 
                 placa_input = self.driver.find_element(By.CSS_SELECTOR, "#placa, input[name='placa']")
                 placa_input.clear()
@@ -486,7 +511,7 @@ class SOATScraper:
                     print("[!] No se pudo resolver Turnstile; reintentando")
                     time.sleep(retry_delay)
                     continue
-                time.sleep(2)
+                time.sleep(0.5)
 
                 captcha_text = self._solve_image_captcha()
                 print(f"[*] CAPTCHA resuelto: {captcha_text}")
@@ -495,7 +520,7 @@ class SOATScraper:
                 captcha_input.clear()
                 captcha_input.send_keys(captcha_text)
 
-                time.sleep(1)
+                time.sleep(0.5)
                 try:
                     submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
                 except Exception:
@@ -508,15 +533,43 @@ class SOATScraper:
                 except Exception:
                     pass
                 result = self._extract_result(pre_body)
+                elapsed = time.time() - t_start
+                print(f"[*] Tiempo total: {elapsed:.1f}s (intento {attempt})")
                 if result.get("success"):
+                    result["tiempo_segundos"] = round(elapsed, 1)
                     return result
-                print(f"[!] Intento {attempt} falló: {result.get('error', '')[:80]}")
+                error_msg = result.get('error', '')[:200]
+                print(f"[!] Intento {attempt} falló: {error_msg}")
+                # Rate limit: no reintentar, cerrar driver y esperar
+                if "se ha superado" in error_msg.lower():
+                    print("[!] Rate limit detectado. Cerrando driver y esperando 30s...")
+                    self.stop()
+                    time.sleep(30)
+                    if self.use_proxy:
+                        self._rotate_proxy()
+                    else:
+                        self.start()
+                    continue
             except Exception as e:
                 print(f"[!] Intento {attempt} error: {e}")
+                # si el driver quedo en estado invalido, forzar recreacion
+                if self.driver:
+                    try:
+                        self.driver.quit()
+                    except Exception:
+                        pass
+                    self.driver = None
             print(f"[*] Reintentando en {retry_delay}s... (intento {attempt})")
             time.sleep(retry_delay)
 
-        return {"success": False, "error": f"Todos los intentos fallaron ({attempt})"}
+        print(f"[!] Maximo de {max_attempts} intentos alcanzado para placa {placa}")
+        self.stop()
+        return {
+            "success": False,
+            "placa": placa,
+            "error": f"Maximo de {max_attempts} intentos sin resultado exitoso",
+            "tiempo_segundos": round(time.time() - t_start, 1),
+        }
 
     def _rotate_proxy(self):
         self.current_proxy = self._get_next_proxy()
@@ -540,7 +593,7 @@ class SOATScraper:
             try:
                 body = self.driver.find_element(By.TAG_NAME, "body").text
             except Exception:
-                time.sleep(1)
+                time.sleep(0.3)
                 continue
             low = body.lower()
             # 1) detectar errores explicitos del SPA
@@ -592,7 +645,7 @@ class SOATScraper:
                             "screenshot_base64": screenshot_b64,
                             "error": None if success else body[:1000]}
             last_body = body
-            time.sleep(1)
+            time.sleep(0.3)
         html = self.driver.page_source
         print(f"\n[*] Estado final iframe:\n{last_body[:600]}")
         screenshot_b64 = self._capturar_screenshot()
@@ -657,7 +710,7 @@ class SOATScraper:
                 element,
             )
             time.sleep(0.3)
-            png = element.screenshot_as_png()
+            png = element.screenshot_as_png
             b64 = base64.b64encode(png).decode("utf-8")
             print(f"[*] Screenshot capturado ({len(png)} bytes base64={len(b64)} chars)")
             return b64

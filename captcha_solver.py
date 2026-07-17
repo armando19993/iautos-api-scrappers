@@ -87,7 +87,7 @@ class CaptchaSolver:
 
         deadline = time.time() + timeout
         while time.time() < deadline:
-            time.sleep(3)
+            time.sleep(1)
             try:
                 resp = self.client.post(
                     f"{self.API_URL}/getTaskResult",
