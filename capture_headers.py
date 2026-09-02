@@ -1,11 +1,12 @@
 import undetected_chromedriver as uc
 import json, time
+from chrome_utils import create_driver
 
 options = uc.ChromeOptions()
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-driver = uc.Chrome(options=options)
+driver = create_driver(options)
 
 # Interceptar requests ANTES de cargar la pagina
 driver.execute_cdp_cmd("Network.enable", {})

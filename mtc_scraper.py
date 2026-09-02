@@ -1,7 +1,5 @@
 import base64
 import json
-import re
-import subprocess
 import time
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
@@ -10,22 +8,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from captcha_solver import CaptchaSolver
 from config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES, MTC_BASE_URL
 from scraper import ProxyForwarder
-
-
-def _detect_chrome_version():
-    for cmd in (["google-chrome", "--version"], ["google-chrome-stable", "--version"],
-                ["/usr/bin/google-chrome", "--version"], ["chromium", "--version"]):
-        try:
-            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=5).decode()
-            m = re.search(r"(\d+)\.\d+\.\d+\.\d+", out)
-            if m:
-                v = int(m.group(1))
-                print(f"[Chrome] Version detectada: {v}")
-                return v
-        except Exception:
-            pass
-    print("[Chrome] No se detecto version, usando 150 por defecto")
-    return 150
+from chrome_utils import create_driver
 
 
 class MTCScraper:
@@ -95,7 +78,7 @@ class MTCScraper:
                 options.add_argument(f"--proxy-server=127.0.0.1:{self.LOCAL_PROXY_PORT}")
                 print(f"[*] MTC usando proxy via forwarder: {host}:{port}")
 
-        self.driver = uc.Chrome(options=options, version_main=_detect_chrome_version())
+        self.driver = create_driver(options)
         self.driver.execute_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => false });
         """)

@@ -4,7 +4,6 @@ import random
 import select
 import socket
 import struct
-import subprocess
 import threading
 import time
 import undetected_chromedriver as uc
@@ -13,24 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from captcha_solver import CaptchaSolver
 from config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES, BASE_URL
-
-
-def _detect_chrome_version():
-    """Detecta la version mayor de Chrome instalada."""
-    for cmd in (["google-chrome", "--version"], ["google-chrome-stable", "--version"],
-                ["/usr/bin/google-chrome", "--version"], ["chromium", "--version"]):
-        try:
-            out = subprocess.check_output(cmd, stderr=subprocess.DEVNULL, timeout=5).decode()
-            import re
-            m = re.search(r"(\d+)\.\d+\.\d+\.\d+", out)
-            if m:
-                v = int(m.group(1))
-                print(f"[Chrome] Version detectada: {v}")
-                return v
-        except Exception:
-            pass
-    print("[Chrome] No se detecto version, usando 150 por defecto")
-    return 150
+from chrome_utils import create_driver
 
 
 class ProxyForwarder:
@@ -306,7 +288,7 @@ class SOATScraper:
         if not self.solver:
             self.solver = CaptchaSolver(CAPSOLVER_API_KEY, None)
 
-        self.driver = uc.Chrome(options=options, version_main=_detect_chrome_version())
+        self.driver = create_driver(options)
         self.driver.execute_script("""
             Object.defineProperty(navigator, 'webdriver', { get: () => false });
         """)

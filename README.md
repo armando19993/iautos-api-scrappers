@@ -105,6 +105,7 @@ Docs interactivas: http://localhost:8000/docs
 soat-scraper/
 ├── main.py              # Entry point CLI
 ├── scraper.py           # Logica principal del scraper
+├── chrome_utils.py      # Deteccion de version de Chrome + creacion del driver
 ├── captcha_solver.py    # Solver via CapSolver
 ├── config.py            # Configuracion
 ├── requirements.txt     # Dependencias
@@ -128,3 +129,23 @@ soat-scraper/
 - Cloudflare Turnstile se resuelve automaticamente sin proxy
 - Cloudflare Challenge requiere proxy (configurar en `.env`)
 - Si falla, esperar unos segundos y reintentar
+
+## Solucion de problemas
+
+### `SessionNotCreatedException: This version of ChromeDriver only supports Chrome version X`
+
+El ChromeDriver que descarga `undetected-chromedriver` debe coincidir con la
+version mayor del Chrome instalado. Todos los scrapers crean el navegador con
+`chrome_utils.create_driver()`, que:
+
+1. Detecta la version instalada (Windows: metadatos de `chrome.exe`, carpeta de
+   instalacion o registro; Linux/macOS: `google-chrome --version`).
+2. Si aun asi el driver no coincide (por ejemplo Chrome se acaba de actualizar),
+   lee la version real del mensaje de error y reintenta con ella.
+
+Si necesitas forzar una version concreta (o la deteccion falla en tu entorno),
+define la variable de entorno `CHROME_VERSION_MAIN` (tambien vale en `.env`):
+
+```
+CHROME_VERSION_MAIN=152
+```

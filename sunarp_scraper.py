@@ -13,6 +13,7 @@ import pytesseract
 
 from config import CAPSOLVER_API_KEY, SUNARP_URL
 from captcha_solver import CaptchaSolver
+from chrome_utils import create_driver
 
 # ── Configurar ruta de Tesseract para Windows ──
 _tesseract_paths = [
@@ -63,7 +64,7 @@ class SunarpScraper:
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/120.0.0.0 Safari/537.36"
         )
-        self.driver = uc.Chrome(options=options)
+        self.driver = create_driver(options)
         self.driver.set_page_load_timeout(45)
         self._captured_requests = []
         print(f"[Sunarp] Chrome iniciado. Ventana visible={not self.headless}")
