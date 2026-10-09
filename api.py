@@ -347,7 +347,12 @@ class SoatResponse(BaseModel):
     )
     tiempo_segundos: Optional[float] = Field(None, examples=[34.2])
     error: Optional[str] = Field(
-        None, description="Mensaje de error cuando `success` es `false`."
+        None,
+        description="Motivo. Aparece con `success:false` (fallo tecnico) o, "
+                    "tambien con `success:true`, cuando la pagina no tiene "
+                    "certificados para la placa (`soat:null`); en ese caso el "
+                    "texto se toma de la propia pagina "
+                    "(ej. `No se encontro la placa solicitada`).",
     )
     webhook: Optional[Dict[str, Any]] = Field(
         None, description="Respuesta devuelta por el webhook de IAUTOS."
