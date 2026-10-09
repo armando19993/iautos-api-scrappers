@@ -610,9 +610,16 @@ class SOATScraper:
                 soat_reciente = self._seleccionar_mas_reciente(cert)
                 # capturar screenshot de la pagina de resultados
                 screenshot_b64 = self._capturar_screenshot()
+                if soat_reciente:
+                    return {"success": True, "placa": placa_val,
+                            "soat": soat_reciente,
+                            "screenshot_base64": screenshot_b64}
+                # sin certificados: la pagina muestra el motivo
+                # (ej. "No se encontro la placa solicitada")
                 return {"success": True, "placa": placa_val,
-                        "soat": soat_reciente,
-                        "screenshot_base64": screenshot_b64}
+                        "soat": None,
+                        "screenshot_base64": screenshot_b64,
+                        "error": self._mensaje_sin_resultado()}
             # 3) si el body cambio drasticamente (navego a /resultados)
             if pre_submit_body and body and body != pre_submit_body:
                 if any(k in low for k in ["vigente", "aseguradora", "certificado",
@@ -660,6 +667,25 @@ class SOATScraper:
             return max(certificados, key=lambda c: parse_fecha(c.get("FechaInicio", "")))
         except Exception:
             return certificados[0]
+
+    def _mensaje_sin_resultado(self, fallback="Sin resultados"):
+        """Lee de la pagina el motivo por el que no hay certificados
+        (ej. "No se encontro la placa solicitada"). Si no se detecta,
+        devuelve `fallback`."""
+        try:
+            body = self.driver.find_element(By.TAG_NAME, "body").text
+        except Exception:
+            return fallback
+        for line in body.splitlines():
+            text = line.strip()
+            if not text:
+                continue
+            low = text.lower()
+            if any(ind in low for ind in
+                   ["no se encontr", "sin resultados", "no registrado",
+                    "no existe"]):
+                return text
+        return fallback
 
     def _capturar_screenshot(self):
         """Captura un screenshot del contenido del iframe de resultados.
