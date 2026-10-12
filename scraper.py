@@ -616,8 +616,10 @@ class SOATScraper:
                             "screenshot_base64": screenshot_b64}
                 # sin certificados: la pagina muestra el motivo
                 # (ej. "No se encontro la placa solicitada")
+                # Estado = "SIN SOAT" para que el reporte no muestre "-"
                 return {"success": True, "placa": placa_val,
-                        "soat": None,
+                        "estado": "SIN SOAT",
+                        "soat": {"Estado": "SIN SOAT"},
                         "screenshot_base64": screenshot_b64,
                         "error": self._mensaje_sin_resultado()}
             # 3) si el body cambio drasticamente (navego a /resultados)

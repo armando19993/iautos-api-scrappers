@@ -339,7 +339,15 @@ class SoatResponse(BaseModel):
     vehiculoId: Optional[int] = Field(None, examples=[42])
     soat: Optional[Dict[str, Any]] = Field(
         None,
-        description="Certificado SOAT vigente más reciente (objeto crudo de APESEG).",
+        description="Certificado SOAT vigente más reciente (objeto crudo de APESEG). "
+                    "Si la placa no tiene certificados, contiene "
+                    "`{\"Estado\": \"SIN SOAT\"}`.",
+    )
+    estado: Optional[str] = Field(
+        None,
+        description="Estado del SOAT en la raíz de la respuesta. "
+                    "`SIN SOAT` cuando no hay certificados.",
+        examples=["VIGENTE"],
     )
     screenshot_base64: Optional[str] = Field(
         None,

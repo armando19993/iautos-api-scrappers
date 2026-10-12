@@ -1,4 +1,12 @@
-INFO:     127.0.0.1:63658 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54495 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57556 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57556 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63557 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63557 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56752 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56752 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63241 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63241 - "GET /v1/models HTTP/1.1" 404 Not Found
 [Chrome] Version detectada: 154 (C:\Program Files\Google\Chrome\Application\chrome.exe)
 
 ==================================================
@@ -9,84 +17,79 @@ INFO:     127.0.0.1:63658 - "GET /health HTTP/1.1" 200 OK
 [*] Placa ingresada: DBH047
 [*] Buscando Cloudflare Turnstile...
 [*] Resolviendo Turnstile con CapSolver: 0x4AAAAAADyJA_4hEDeVktbR
-[*] Task ID: 4d26d8de-372d-4362-be4f-583ce71cc70b
-[*] Token: 1.qILAdwmuzQU4fkFpVGZhr7OATDDbpyT8500Ot_tXMIh-r8j6...
+[*] Task ID: e2a643ea-dd40-421b-809c-8516eea3ac95
+[*] Token: 1.YPXRuFxg0yF4h1CXBns05Gd0qnWk4a6N8mh5vLX45nESTDCw...
 [*] Token Turnstile inyectado
-[*] CAPTCHA extraido del src (4292 chars base64)
-[*] Enviando CAPTCHA a CapSolver (4292 chars)...
-[+] CAPTCHA resuelto: 't69jbq'
-[*] CAPTCHA resuelto: t69jbq
+[*] CAPTCHA extraido del src (4216 chars base64)
+[*] Enviando CAPTCHA a CapSolver (4216 chars)...
+[+] CAPTCHA resuelto: 'qgcufe'
+[*] CAPTCHA resuelto: qgcufe
 [*] Formulario enviado
 
 [*] Certificados obtenidos via localStorage
 [*] Screenshot capturado (24940 bytes base64=33256 chars)
-[*] Tiempo total: 11.9s (intento 1)
-INFO:     127.0.0.1:60930 - "POST /soat HTTP/1.1" 200 OK
-INFO:     127.0.0.1:55699 - "POST /soat HTTP/1.1" 422 Unprocessable Content
+[*] Tiempo total: 7.9s (intento 1)
+INFO:     127.0.0.1:55649 - "POST /soat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49215 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49215 - "GET /v1/models HTTP/1.1" 404 Not Found
 [Chrome] Version detectada: 154 (C:\Program Files\Google\Chrome\Application\chrome.exe)
 
 ==================================================
 [*] Consultando SOAT para placa: CAG118
 ==================================================
-[*] Pagina principal cargada (0.8s)
+[*] Pagina principal cargada (1.2s)
 [*] Frame del formulario encontrado
 [*] Placa ingresada: CAG118
 [*] Buscando Cloudflare Turnstile...
 [*] Resolviendo Turnstile con CapSolver: 0x4AAAAAADyJA_4hEDeVktbR
-[*] Task ID: 92cf7758-c161-4be7-bab7-6baba748478a
-[*] Token: 1.No7-lmv4ma1HZFXoC6vL1DhSYaK7W0FCd0I2xAfXSNl6f2Jl...
+[*] Task ID: 866e2306-8c49-4d61-96bf-a3591f49bb32
+[*] Token: 1.4yuSMv2zZ3himtbKVCTHzwoojViyvrr6sGBtxSkd2_ZnV_xK...
 [*] Token Turnstile inyectado
-[*] CAPTCHA extraido del src (4408 chars base64)
-[*] Enviando CAPTCHA a CapSolver (4408 chars)...
-[+] CAPTCHA resuelto: '7mdd6e'
-[*] CAPTCHA resuelto: 7mdd6e
-[*] Formulario enviado
-[*] Screenshot capturado (32614 bytes base64=43488 chars)
-[*] Tiempo total: 13.3s (intento 1)
-[!] Intento 1 falló: Consulta SOAT
-Número de Placa
-Captcha
-Consultar
-Captcha incorrecto
-[*] Reintentando en 5s... (intento 1)
-[*] Pagina principal cargada (0.8s)
-[*] Frame del formulario encontrado
-[*] Placa ingresada: CAG118
-[*] Buscando Cloudflare Turnstile...
-[*] Resolviendo Turnstile con CapSolver: 0x4AAAAAADyJA_4hEDeVktbR
-[*] Task ID: f187174b-6ab6-46dc-bc34-22bd1fd0c6bc
-[*] Token: 1.obJV4XmaDNM1gyRe9y-vtuloZbUA-0t5nPXI_iJ2cVrFf16j...
-[*] Token Turnstile inyectado
-[*] CAPTCHA extraido del src (4572 chars base64)
-[*] Enviando CAPTCHA a CapSolver (4572 chars)...
-[+] CAPTCHA resuelto: 'rmhyup'
-[*] CAPTCHA resuelto: rmhyup
+[*] CAPTCHA extraido del src (4320 chars base64)
+[*] Enviando CAPTCHA a CapSolver (4320 chars)...
+[+] CAPTCHA resuelto: '7be6n8'
+[*] CAPTCHA resuelto: 7be6n8
 [*] Formulario enviado
 
 [*] Certificados obtenidos via localStorage
 [*] Screenshot capturado (247280 bytes base64=329708 chars)
-[*] Tiempo total: 27.3s (intento 2)
-INFO:     127.0.0.1:55700 - "POST /soat HTTP/1.1" 200 OK
-[Chrome] Version detectada: 154 (C:\Program Files\Google\Chrome\Application\chrome.exe)
-
-==================================================
-[*] Consultando SOAT para placa: DBH047
-==================================================
-[*] Pagina principal cargada (0.9s)
-[*] Frame del formulario encontrado
-[*] Placa ingresada: DBH047
-[*] Buscando Cloudflare Turnstile...
-[*] Resolviendo Turnstile con CapSolver: 0x4AAAAAADyJA_4hEDeVktbR
-[*] Task ID: e27f3933-9ce7-4937-8cdb-851dae205849
-[*] Token: 1.htkhUmiNeB2LXcVVgjC6GyA2xBpbs4IQTc7n2vHqkSWWTrE-...
-[*] Token Turnstile inyectado
-[*] CAPTCHA extraido del src (4392 chars base64)
-[*] Enviando CAPTCHA a CapSolver (4392 chars)...
-[+] CAPTCHA resuelto: 'x67eeq'
-[*] CAPTCHA resuelto: x67eeq
-[*] Formulario enviado
-
-[*] Certificados obtenidos via localStorage
-[*] Screenshot capturado (24940 bytes base64=33256 chars)
-[*] Tiempo total: 7.8s (intento 1)
-INFO:     127.0.0.1:63937 - "POST /soat HTTP/1.1" 200 OK
+[*] Tiempo total: 8.0s (intento 1)
+INFO:     127.0.0.1:64379 - "POST /soat HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58264 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58264 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61877 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61877 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53707 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53707 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:50685 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50685 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61380 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61380 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60791 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60791 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:52062 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52062 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49286 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49286 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51274 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51274 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:57617 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57617 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61936 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61936 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55687 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55687 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:63884 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:63884 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:53548 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53548 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:61430 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61430 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:56782 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:56782 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55073 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55073 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:49674 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49674 - "GET /v1/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60069 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60069 - "GET /v1/models HTTP/1.1" 404 Not Found
