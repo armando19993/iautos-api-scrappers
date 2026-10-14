@@ -558,6 +558,15 @@ class SOATScraper:
                     else:
                         self.start()
                     continue
+                # el servidor no pudo validar el captcha (suele pasar si la IP residencial
+                # cambio a mitad de la consulta): reintentar con driver nuevo y otra sesion
+                if "error validando captcha" in error_msg.lower():
+                    self.stop()
+                    if self.use_proxy:
+                        self.current_proxy = self._get_next_proxy()
+                        print("[*] Error validando captcha; reintento con otra sesion de proxy")
+                    else:
+                        print("[*] Error validando captcha; reintento con driver nuevo")
             except Exception as e:
                 print(f"[!] Intento {attempt} error: {e}")
                 # liberar driver + forwarder local; start() creara unos nuevos
@@ -606,7 +615,7 @@ class SOATScraper:
                 continue
             low = body.lower()
             # 1) detectar errores explicitos del SPA
-            for ind in ["captcha incorrecto", "complete la validaci", "se ha superado",
+            for ind in ["captcha incorrecto", "error validando captcha", "complete la validaci", "se ha superado",
                         "error consultando", "el servicio de captcha", "no se encuentra"]:
                 if ind in low:
                     html = self.driver.page_source

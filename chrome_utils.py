@@ -28,6 +28,7 @@ import re
 import struct
 import subprocess
 import sys
+import threading
 import time
 
 import undetected_chromedriver as uc
@@ -48,6 +49,10 @@ _VERSION_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)\.(\d+)")
 _MISMATCH_RE = re.compile(r"Current browser version is (\d+)\.")
 
 _IS_WINDOWS = sys.platform.startswith("win")
+
+# uc.Chrome parchea y copia el mismo chromedriver en disco al arrancar; varios
+# hilos a la vez chocan por ese archivo (WinError 32 / 183). Se serializa el arranque.
+_DRIVER_LOCK = threading.Lock()
 
 
 def _major(text):
@@ -308,14 +313,15 @@ def create_driver(options=None, version_main=None, retry_on_mismatch=True, **kwa
     if version_main is None:
         version_main = detect_chrome_version()
 
-    try:
-        return uc.Chrome(options=copy.deepcopy(options), version_main=version_main, **kwargs)
-    except SessionNotCreatedException as exc:
-        actual = _browser_version_from_error(str(exc))
-        if not retry_on_mismatch or not actual or actual == version_main:
-            raise
-        print(f"[Chrome] ChromeDriver {version_main or 'auto'} no coincide con Chrome {actual}; "
-              f"reintentando con ChromeDriver {actual}")
-        if not kwargs.get("driver_executable_path"):
-            _release_cached_driver()
-        return uc.Chrome(options=copy.deepcopy(options), version_main=actual, **kwargs)
+    with _DRIVER_LOCK:
+        try:
+            return uc.Chrome(options=copy.deepcopy(options), version_main=version_main, **kwargs)
+        except SessionNotCreatedException as exc:
+            actual = _browser_version_from_error(str(exc))
+            if not retry_on_mismatch or not actual or actual == version_main:
+                raise
+            print(f"[Chrome] ChromeDriver {version_main or 'auto'} no coincide con Chrome {actual}; "
+                  f"reintentando con ChromeDriver {actual}")
+            if not kwargs.get("driver_executable_path"):
+                _release_cached_driver()
+            return uc.Chrome(options=copy.deepcopy(options), version_main=actual, **kwargs)
