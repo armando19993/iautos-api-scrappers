@@ -558,15 +558,16 @@ class SOATScraper:
                     else:
                         self.start()
                     continue
-                # el servidor no pudo validar el captcha (suele pasar si la IP residencial
-                # cambio a mitad de la consulta): reintentar con driver nuevo y otra sesion
-                if "error validando captcha" in error_msg.lower():
+                # el servidor no pudo validar el captcha o la llamada a la API se corto
+                # (suele pasar si la IP residencial cae a mitad de la consulta):
+                # reintentar con driver nuevo y otra sesion
+                if any(k in error_msg.lower() for k in ("error validando captcha", "failed to fetch")):
                     self.stop()
                     if self.use_proxy:
                         self.current_proxy = self._get_next_proxy()
-                        print("[*] Error validando captcha; reintento con otra sesion de proxy")
+                        print("[*] Error de captcha/red en la pagina; reintento con otra sesion de proxy")
                     else:
-                        print("[*] Error validando captcha; reintento con driver nuevo")
+                        print("[*] Error de captcha/red en la pagina; reintento con driver nuevo")
             except Exception as e:
                 print(f"[!] Intento {attempt} error: {e}")
                 # liberar driver + forwarder local; start() creara unos nuevos
@@ -664,8 +665,11 @@ class SOATScraper:
                                           "no se encontr", "resultado", "placa"]):
                     html = self.driver.page_source
                     print(f"\n[*] Respuesta (DOM):\n{body[:800]}")
-                    success = not any(ind in low for ind in
-                                      ["no se encontr", "no existe", "error consultando"])
+                    # exito solo si hay datos del SOAT; "placa"/"resultado" tambien aparecen
+                    # en el formulario con errores como "Failed to fetch"
+                    success = (any(k in low for k in ["vigente", "vencido", "aseguradora", "certificado"])
+                               and not any(ind in low for ind in
+                                           ["no se encontr", "no existe", "error consultando"]))
                     screenshot_b64 = self._capturar_screenshot()
                     return {"success": success, "raw_text": body[:2000],
                             "raw_html": html[:5000],
