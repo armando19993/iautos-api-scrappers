@@ -51,6 +51,7 @@ class ProxyForwarder:
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind(("127.0.0.1", self.local_port))
+        self.local_port = self.server_socket.getsockname()[1]
         self.server_socket.listen(128)
         self.server_socket.settimeout(1)
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -90,38 +91,50 @@ class ProxyForwarder:
 
             print(f"[*] CONNECT -> {target}")
 
-            remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            remote_socket.settimeout(30)
-            remote_socket.connect((self.remote_host, self.remote_port))
+            remote_socket = None
+            try:
+                remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                remote_socket.settimeout(30)
+                remote_socket.connect((self.remote_host, self.remote_port))
 
-            auth = base64.b64encode(self.credentials.encode()).decode()
-            connect_req = (
-                f"CONNECT {target} HTTP/1.1\r\n"
-                f"Host: {target}\r\n"
-                f"Proxy-Authorization: Basic {auth}\r\n"
-                f"Connection: keep-alive\r\n"
-                f"\r\n"
-            )
-            remote_socket.sendall(connect_req.encode())
+                auth = base64.b64encode(self.credentials.encode()).decode()
+                connect_req = (
+                    f"CONNECT {target} HTTP/1.1\r\n"
+                    f"Host: {target}\r\n"
+                    f"Proxy-Authorization: Basic {auth}\r\n"
+                    f"Connection: keep-alive\r\n"
+                    f"\r\n"
+                )
+                remote_socket.sendall(connect_req.encode())
 
-            response = b""
-            while b"\r\n\r\n" not in response:
-                chunk = remote_socket.recv(4096)
-                if not chunk:
-                    break
-                response += chunk
+                response = b""
+                while b"\r\n\r\n" not in response and len(response) < 8192:
+                    chunk = remote_socket.recv(4096)
+                    if not chunk:
+                        break
+                    response += chunk
 
-            status_line = response.split(b"\r\n")[0].decode(errors="ignore")
+                status_line = response.split(b"\r\n")[0].decode(errors="ignore")
+                head, _, extra = response.partition(b"\r\n\r\n")
 
-            if b"200" in response.split(b"\r\n")[0]:
-                client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-                self._tunnel(client_socket, remote_socket)
-            else:
-                print(f"[!] Proxy remoto rechazó {target}: {status_line}")
-                client_socket.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
-                client_socket.close()
-
-            remote_socket.close()
+                if " 200" in status_line:
+                    client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                    if extra:
+                        client_socket.sendall(extra)
+                    self._tunnel(client_socket, remote_socket)
+                else:
+                    print(f"[!] Proxy remoto rechazó {target}: {status_line}")
+                    client_socket.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
+            finally:
+                if remote_socket:
+                    try:
+                        remote_socket.close()
+                    except Exception:
+                        pass
+                try:
+                    client_socket.close()
+                except Exception:
+                    pass
         except Exception as e:
             print(f"[*] Proxy tunnel error: {e}")
             try:
@@ -166,6 +179,12 @@ class ProxyForwarder:
                         client.sendall(data)
         except Exception:
             pass
+        finally:
+            for s in (client, remote):
+                try:
+                    s.close()
+                except Exception:
+                    pass
 
     def stop(self):
         self._running = False
@@ -178,13 +197,14 @@ class ProxyForwarder:
 
 class SOATScraper:
     IFRAME_URL = "https://webapp.apeseg.org.pe/consulta-soat/"
-    LOCAL_PROXY_PORT = 18080
+    LOCAL_PROXY_PORT = 0  # 0 = puerto efimero (evita colisiones entre scrapers concurrentes)
     TURNSTILE_SITEKEY = "0x4AAAAAADyJA_4hEDeVktbR"
 
     def __init__(self, use_proxy=False, headless=False):
         self.use_proxy = use_proxy
         self.headless = headless
-        self.proxy_index = 0
+        # indice inicial aleatorio: scrapers concurrentes no comparten la misma sesion/IP
+        self.proxy_index = random.randrange(len(CAPSOLVER_PROXIES)) if CAPSOLVER_PROXIES else 0
         self.current_proxy = None
         self.solver = None
         self.driver = None
@@ -208,7 +228,8 @@ class SOATScraper:
             self.LOCAL_PROXY_PORT, host, port, user, password
         )
         self.proxy_forwarder.start()
-        print(f"[*] Proxy forwarder en 127.0.0.1:{self.LOCAL_PROXY_PORT}")
+        print(f"[*] Proxy forwarder en 127.0.0.1:{self.proxy_forwarder.local_port}")
+        return self.proxy_forwarder.local_port
 
     def _stop_local_proxy(self):
         if self.proxy_forwarder:
@@ -244,10 +265,6 @@ class SOATScraper:
             return False
 
     def start(self):
-        if self.use_proxy and not self.solver:
-            self.current_proxy = self._get_next_proxy()
-            self.solver = CaptchaSolver(CAPSOLVER_API_KEY, self.current_proxy)
-
         options = uc.ChromeOptions()
         options.add_argument("--disable-blink-features=AutomationControlled")
         options.add_argument("--no-sandbox")
@@ -273,17 +290,26 @@ class SOATScraper:
         options.add_argument("--no-default-browser-check")
         options.add_argument("--no-first-run")
 
-        proxy_ok = False
-        if self.use_proxy and self.current_proxy:
-            host, port, user, password = self._parse_proxy(self.current_proxy)
-            proxy_ok = self._test_proxy(self.current_proxy)
-            if proxy_ok:
-                self._start_local_proxy(host, port, user, password)
-                options.add_argument(f"--proxy-server=127.0.0.1:{self.LOCAL_PROXY_PORT}")
+        if self.use_proxy:
+            if not self.current_proxy:
+                self.current_proxy = self._get_next_proxy()
+            chosen = None
+            max_tries = min(5, len(CAPSOLVER_PROXIES)) or 1
+            for _ in range(max_tries):
+                if self.current_proxy and self._test_proxy(self.current_proxy):
+                    chosen = self.current_proxy
+                    break
+                print("[!] Proxy no responde, probando el siguiente...")
+                self.current_proxy = self._get_next_proxy()
+            if chosen:
+                host, port, user, password = self._parse_proxy(chosen)
+                local_port = self._start_local_proxy(host, port, user, password)
+                options.add_argument(f"--proxy-server=http://127.0.0.1:{local_port}")
+                self.solver = CaptchaSolver(CAPSOLVER_API_KEY, chosen)
                 print(f"[*] Proxy CapSolver activo: {host}:{port}")
             else:
-                print("[!] Proxy no responde. Continuando SIN proxy (IP local).")
-                self.use_proxy = False
+                # Solo para este driver; el proximo start() volvera a intentar con proxy
+                print(f"[!] Ningun proxy respondio tras {max_tries} intentos. Este driver usara IP local.")
 
         if not self.solver:
             self.solver = CaptchaSolver(CAPSOLVER_API_KEY, None)
@@ -472,14 +498,14 @@ class SOATScraper:
                     time.sleep(retry_delay)
                     continue
 
-                if attempt > 1 and self.use_proxy:
-                    self._rotate_proxy()
-
                 self.driver.get(BASE_URL)
                 self._wait_for_cloudflare()
                 title = (self.driver.title or "").lower()
-                if "error" in title or "bad gateway" in title or not title:
-                    print(f"[!] Pagina no cargo OK (title={title!r}). Posible 502/proxy.")
+                if self.use_proxy and ("error" in title or "bad gateway" in title or not title
+                                       or "err_" in title or "proxy" in title):
+                    raise Exception(f"PROXY_PAGE: la pagina no cargo via proxy (title={title!r})")
+                elif "error" in title or "bad gateway" in title or not title:
+                    print(f"[!] Pagina no cargo OK (title={title!r}).")
                 print(f"[*] Pagina principal cargada ({time.time()-t_attempt:.1f}s)")
                 self._switch_to_iframe()
                 time.sleep(0.5)
@@ -534,13 +560,14 @@ class SOATScraper:
                     continue
             except Exception as e:
                 print(f"[!] Intento {attempt} error: {e}")
-                # si el driver quedo en estado invalido, forzar recreacion
-                if self.driver:
-                    try:
-                        self.driver.quit()
-                    except Exception:
-                        pass
-                    self.driver = None
+                # liberar driver + forwarder local; start() creara unos nuevos
+                self.stop()
+                msg = str(e)
+                if self.use_proxy and any(k in msg for k in (
+                        "PROXY_PAGE", "ERR_PROXY", "ERR_TUNNEL", "ERR_TIMED_OUT",
+                        "ERR_CONNECTION", "timeout", "Timeout")):
+                    self.current_proxy = self._get_next_proxy()
+                    print(f"[*] Fallo de red/proxy; siguiente proxy: {self.current_proxy.split(':')[0] if self.current_proxy else None}")
             print(f"[*] Reintentando en {retry_delay}s... (intento {attempt})")
             time.sleep(retry_delay)
 
