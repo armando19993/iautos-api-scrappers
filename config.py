@@ -19,3 +19,13 @@ CAPSOLVER_PROXIES = [
     "proxy.capsolver.com:36583:84BC6CBF8DABAA37-resi-country_ANY-rotate_0m-session_houshocq2m:2O0jDAt2",
     "proxy.capsolver.com:36583:84BC6CBF8DABAA37-resi-country_ANY-rotate_0m-session_bdZDkqU7w7:2O0jDAt2",
 ]
+# Webhook de Sunarp (una sola URL; el body lleva `operacion`). Sin valores por defecto.
+WEBHOOK_SUNARP_URL = os.getenv("WEBHOOK_SUNARP_URL", "")
+WEBHOOK_SUNARP_TOKEN = os.getenv("WEBHOOK_SUNARP_TOKEN", "")
+# Reintentos del INSERT (solo timeout / 5xx). 0 hasta confirmar el UNIQUE (Veh_NumeroPlaca, Veh_EmpId).
+WEBHOOK_SUNARP_INSERT_RETRIES = max(0, min(2, int(os.getenv("WEBHOOK_SUNARP_INSERT_RETRIES", "0"))))
+
+# Pool de clientes Sunarp compartido por sync y async.
+SUNARP_POOL_SIZE = max(1, int(os.getenv("SUNARP_POOL_SIZE", "5")))
+# Segundos que un request sync espera un cliente libre antes de responder 503.
+SUNARP_SYNC_WAIT_SECONDS = float(os.getenv("SUNARP_SYNC_WAIT_SECONDS", "30"))
