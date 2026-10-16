@@ -6,7 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from captcha_solver import CaptchaSolver
-from config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES, MTC_BASE_URL
+from config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES_MTC, MTC_BASE_URL
 from scraper import ProxyForwarder
 from chrome_utils import create_driver
 
@@ -23,9 +23,9 @@ class MTCScraper:
         self.proxy_forwarder = None
 
     def _get_next_proxy(self):
-        if not CAPSOLVER_PROXIES:
+        if not CAPSOLVER_PROXIES_MTC:
             return None
-        proxy = CAPSOLVER_PROXIES[self.proxy_index % len(CAPSOLVER_PROXIES)]
+        proxy = CAPSOLVER_PROXIES_MTC[self.proxy_index % len(CAPSOLVER_PROXIES_MTC)]
         self.proxy_index += 1
         return proxy
 

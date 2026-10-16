@@ -19,6 +19,10 @@ CAPSOLVER_PROXIES = [
     "proxy.capsolver.com:36583:84BC6CBF8DABAA37-resi-country_ANY-rotate_0m-session_houshocq2m:2O0jDAt2",
     "proxy.capsolver.com:36583:84BC6CBF8DABAA37-resi-country_ANY-rotate_0m-session_bdZDkqU7w7:2O0jDAt2",
 ]
+
+# El MTC no muestra el captcha a IPs extranjeras: usa las mismas sesiones con salida en Peru.
+# SOAT sigue con CAPSOLVER_PROXIES (country_ANY).
+CAPSOLVER_PROXIES_MTC = [p.replace("-country_ANY-", "-country_PE-") for p in CAPSOLVER_PROXIES]
 # Webhook de Sunarp (una sola URL; el body lleva `operacion`). Sin valores por defecto.
 WEBHOOK_SUNARP_URL = os.getenv("WEBHOOK_SUNARP_URL", "")
 WEBHOOK_SUNARP_TOKEN = os.getenv("WEBHOOK_SUNARP_TOKEN", "")
