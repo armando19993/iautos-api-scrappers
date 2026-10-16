@@ -1,6 +1,6 @@
 """OCR (Tesseract) de la tarjeta vehicular de Sunarp, con preprocesado configurable.
 
-Variables de entorno (ver config.py):
+Variables de entorno (ver app/core/config.py):
   TESSERACT_CMD           ruta a tesseract(.exe); si no se define se busca en rutas tipicas de Windows / PATH
   SUNARP_OCR_PREPROCESS   1/0: escala de grises + ampliacion + umbral (default 1)
   SUNARP_OCR_SCALE        factor de ampliacion (default 2, entre 1 y 4)

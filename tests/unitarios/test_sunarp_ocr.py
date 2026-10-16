@@ -1,9 +1,9 @@
-"""Pruebas de sunarp_ocr sin Tesseract real (se simula pytesseract). Uso: python test_sunarp_ocr.py"""
+"""Pruebas del OCR de Sunarp sin Tesseract real (se simula pytesseract). Uso: python -m tests.unitarios.test_sunarp_ocr"""
 import pytesseract
 from PIL import Image
 
 import app.procesos.sunarp.ocr as sunarp_ocr
-from test_sunarp_parser import REAL
+from tests.unitarios.test_sunarp_parser import REAL
 
 img = Image.new("RGB", (100, 50), "white")
 

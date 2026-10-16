@@ -1,11 +1,11 @@
-"""Pruebas del flujo SINCRONO de Sunarp (pool simulado, sin red). Uso: python test_sunarp_sync.py"""
+"""Pruebas del flujo SINCRONO de Sunarp (pool simulado, sin red). Uso: python -m tests.integracion.test_sunarp_sync"""
 import httpx
 from fastapi.testclient import TestClient
 
 import api
 import app.compartido.webhook as webhook
 import app.procesos.sunarp.servicio as sunarp_servicio
-from test_sunarp_parser import REAL
+from tests.unitarios.test_sunarp_parser import REAL
 
 LLAMADAS_HTTP = []
 

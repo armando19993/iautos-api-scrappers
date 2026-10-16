@@ -1,151 +1,152 @@
-# SOAT Scraper - APESEG
+# Api Scrappers IAUTOS
 
-Scraper para consultar SOAT en apeseg.org.pe con resolucion automatica de CAPTCHAs.
+API (FastAPI) que consulta información oficial de vehículos en el Perú a partir de la placa.
+Los captchas se resuelven con [CapSolver](https://www.capsolver.com).
 
-## Tecnologias
+| Proceso | Fuente | Técnica | Endpoint | Tiempo aprox. |
+|---|---|---|---|---|
+| SOAT | APESEG (apeseg.org.pe) | Chrome (undetected-chromedriver) + Turnstile + captcha de imagen | `POST /soat` | 30–40 s |
+| MTC (CITV) | rec.mtc.gob.pe | Chrome + CapSolver | `POST /mtc` | 10–40 s |
+| Sunarp | consultavehicular.sunarp.gob.pe | HTTP directo + Turnstile + OCR (Tesseract) | `POST /sunarp` | ~3 s |
 
-- **Playwright** - Navegador real (mas rapido que Selenium)
-- **CapSolver API** - Resolucion de CAPTCHAs con IA
-- **Python 3.10+**
+## Requisitos
 
-## CAPTCHAs Soportados
+- Python 3.11+
+- Google Chrome
+- Tesseract OCR con datos en español (solo Sunarp)
+- API key de CapSolver
 
-1. **Image CAPTCHA** - Texto distorsionado
-2. **Cloudflare Turnstile** - Widget de verificacion
-3. **Cloudflare Challenge** - Challenge completo
-
-## Instalacion
+## Instalación
 
 ```bash
-cd soat-scraper
 pip install -r requirements.txt
-playwright install chromium
+cp .env.example .env     # completar CAPSOLVER_API_KEY y las variables de Sunarp
 ```
 
-## Configuracion
+Las variables disponibles están documentadas en `.env.example`.
 
-1. Registrarse en [CapSolver](https://www.capsolver.com) y obtener API key
-2. Crear archivo `.env` desde el ejemplo:
-   ```bash
-   copy .env.example .env
-   ```
-3. Editar `.env` con tu API key y datos de MariaDB:
-   ```
-   CAPSOLVER_API_KEY=CAP-XXXXX-tu-api-key
-   MARIADB_HOST=localhost
-   MARIADB_PORT=3306
-   MARIADB_USER=root
-   MARIADB_PASSWORD=tu_password
-   MARIADB_DATABASE=soat
-   ```
-4. La API crea la tabla `soat_consultas` automaticamente al arrancar
-   (ver `db.py` para el esquema completo).
-
-## Uso
-
-### CLI
+## Ejecutar la API
 
 ```bash
-# Consultar una placa (sin proxy, usa tu IP local)
-python main.py --placa ABC123
-
-# Consultar multiples placas
-python main.py --placas ABC123,XYZ789,DEF456
-
-# Guardar en archivo especifico
-python main.py --placa ABC123 --output mi_archivo.json
-
-# Usar proxy residencial CapSolver (solo si tu IP es bloqueada por Cloudflare)
-python main.py --placa ABC123 --proxy
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-### API (FastAPI)
+- Documentación interactiva: `/docs` y `/redoc` (protegidas con Basic Auth).
+- `uvicorn api:app` sigue funcionando por compatibilidad (ver [ADR 0001](docs/adr/0001-estructura-por-procesos.md)).
+
+### Endpoints
+
+Cada proceso tiene los mismos cuatro puntos de entrada:
+
+| Método | Ruta | Modo |
+|---|---|---|
+| POST | `/{soat,mtc,sunarp}` | Síncrono: espera y devuelve el resultado |
+| POST | `/{soat,mtc,sunarp}/async` | Asíncrono: responde de inmediato y procesa en segundo plano |
+| GET | `/{soat,mtc,sunarp}/async` | Asíncrono vía query params |
+| GET | `/{soat,mtc,sunarp}/{placa}` | Atajo síncrono para pruebas |
+
+Además: `GET /` (índice) y `GET /health`.
+
+- SOAT y MTC reciben `placa` y `vehiculoId`, y envían el resultado al webhook de IAUTOS.
+- Sunarp recibe `placa` y `empresaId`.
+- Una consulta fallida responde **HTTP 200 con `success:false`** y el motivo en `error`; los
+  códigos 4xx/5xx son para peticiones inválidas o errores internos.
+
+## CLI
 
 ```bash
-# Iniciar el servidor
-python api.py
-# o: uvicorn api:app --host 0.0.0.0 --port 8000
+python -m app.cli --placa ABC123                 # SOAT
+python -m app.cli --placas ABC123,XYZ789         # varias placas
+python -m app.cli --placa ABC123 --mtc           # MTC CITV
+python -m app.cli --placa ABC123 --sunarp        # Sunarp (Selenium + OCR)
+python -m app.cli --placa ABC123 --proxy --output resultado.json
 ```
 
-Endpoints disponibles:
+En Windows también: `run.bat --placa ABC123`.
 
-| Metodo | Ruta                | Descripcion                                            |
-|--------|---------------------|--------------------------------------------------------|
-| GET    | `/`                 | Lista de endpoints                                     |
-| GET    | `/health`           | Estado del servicio                                    |
-| POST   | `/soat`             | Modo sincrono (espera ~30-40s y retorna el SOAT)       |
-| POST   | `/soat/async`       | Modo async (202 inmediato, corre en background)       |
-| GET    | `/soat/{placa}`     | Atajo sync desde el navegador                          |
+## Tests
 
-**POST /soat** (sincrono):
+Se ejecutan desde la raíz del repo:
+
 ```bash
-curl -X POST http://localhost:8000/soat \
-  -H "Content-Type: application/json" \
-  -d "{\"placa\":\"ABC123\"}"
+python -m tests.contrato.test_openapi              # el contrato de la API no cambió
+python -m tests.unitarios.test_sunarp_parser
+python -m tests.unitarios.test_sunarp_ocr
+python -m tests.integracion.test_sunarp_sync
 ```
 
-**POST /soat/async** (background):
-```bash
-curl -X POST http://localhost:8000/soat/async \
-  -H "Content-Type: application/json" \
-  -d "{\"placa\":\"ABC123\"}"
-```
-
-Body:
-- `placa` (str, requerido): placa del vehiculo
-- `use_proxy` (bool, opcional, default false): usar proxy residencial CapSolver
-
-Ambos modos envian el resultado al webhook.site configurado en `webhook.py`.
-
-Docs interactivas: http://localhost:8000/docs
+- **Contrato**: compara el OpenAPI y las rutas contra `tests/contrato/openapi.snapshot.json`.
+  Si cambias la API a propósito, regenera el snapshot con
+  `python -m tests.contrato.test_openapi --actualizar` y deja el diff visible en el PR.
+- **Carga** (`tests/carga/`): consultas reales contra los sitios oficiales; gastan saldo de
+  CapSolver y tráfico de proxy. No envían nada al webhook.
+  ```bash
+  python -m tests.carga.test_soat_proxy ABC123 20 4 1
+  python -m tests.carga.test_sunarp --total 30 --workers 5
+  ```
 
 ## Estructura
 
 ```
-soat-scraper/
-├── main.py              # Entry point CLI
-├── scraper.py           # Logica principal del scraper
-├── chrome_utils.py      # Deteccion de version de Chrome + creacion del driver
-├── captcha_solver.py    # Solver via CapSolver
-├── config.py            # Configuracion
-├── requirements.txt     # Dependencias
-├── .env.example         # Ejemplo de configuracion
-└── README.md
+app/
+├── main.py              # crea la app FastAPI: middlewares, OpenAPI y routers
+├── cli.py               # consultas desde la terminal
+├── core/                # config (.env), OpenAPI, Basic Auth de /docs, schemas y rutas comunes
+├── compartido/          # captcha (CapSolver), chrome, proxy_forwarder, webhook
+└── procesos/
+    ├── soat/            # scraper · schemas · rutas · servicio
+    ├── mtc/             # scraper · schemas · rutas · servicio
+    └── sunarp/          # cliente_http · pool · ocr · parser · scraper_selenium · schemas · rutas · servicio
+scripts/                 # herramientas manuales (probar proxy, OCR, mock del webhook...)
+tests/                   # contrato · unitarios · integracion · carga
+docs/                    # arquitectura, roadmap, ADRs, módulos, despliegue
+api.py                   # compatibilidad: uvicorn api:app
 ```
 
-## CapSolver API - Precios
+### Dónde va cada cosa
 
-| Tipo                 | Velocidad   |
-|----------------------|-------------|
-| Image CAPTCHA        | < 1 seg     |
-| Cloudflare Turnstile | < 20 seg    |
-| Cloudflare Challenge | < 20 seg    |
+| Quiero… | Archivo |
+|---|---|
+| Cambiar cómo se scrapea un sitio | `app/procesos/<proceso>/scraper.py` (Sunarp: `cliente_http.py`) |
+| Cambiar qué hace un endpoint con el resultado (webhook, validaciones, async) | `app/procesos/<proceso>/servicio.py` |
+| Agregar o cambiar un endpoint | `app/procesos/<proceso>/rutas.py` + `schemas.py` (y regenerar el snapshot del contrato) |
+| Algo que usan varios procesos (captcha, Chrome, proxy, webhook) | `app/compartido/` |
+| Una variable de entorno | `app/core/config.py` + `.env.example` |
+| Un proceso nuevo | carpeta nueva en `app/procesos/` con `scraper`, `schemas`, `rutas`, `servicio`, y su `include_router` en `app/main.py` |
 
-- [Dashboard de CapSolver](https://www.capsolver.com)
+Reglas: un proceso no importa nada de otro proceso; las rutas solo validan y delegan en
+`servicio.py`.
 
-## Notas
+## Despliegue
 
-- El scraper abre un navegador real (no headless) para pasar verificaciones anti-bot
-- Cloudflare Turnstile se resuelve automaticamente sin proxy
-- Cloudflare Challenge requiere proxy (configurar en `.env`)
-- Si falla, esperar unos segundos y reintentar
+Docker + Nginx Proxy Manager en un VPS: [docs/despliegue-vps.md](docs/despliegue-vps.md).
 
-## Solucion de problemas
+## Solución de problemas
 
 ### `SessionNotCreatedException: This version of ChromeDriver only supports Chrome version X`
 
-El ChromeDriver que descarga `undetected-chromedriver` debe coincidir con la
-version mayor del Chrome instalado. Todos los scrapers crean el navegador con
-`chrome_utils.create_driver()`, que:
+El ChromeDriver que descarga `undetected-chromedriver` debe coincidir con la versión mayor
+del Chrome instalado. Todos los scrapers crean el navegador con
+`app.compartido.chrome.create_driver()`, que:
 
-1. Detecta la version instalada (Windows: metadatos de `chrome.exe`, carpeta de
-   instalacion o registro; Linux/macOS: `google-chrome --version`).
-2. Si aun asi el driver no coincide (por ejemplo Chrome se acaba de actualizar),
-   lee la version real del mensaje de error y reintenta con ella.
+1. Detecta la versión instalada (Windows: metadatos de `chrome.exe`, carpeta de instalación
+   o registro; Linux/macOS: `google-chrome --version`).
+2. Si aun así el driver no coincide (por ejemplo, Chrome se acaba de actualizar), lee la
+   versión real del mensaje de error y reintenta con ella.
 
-Si necesitas forzar una version concreta (o la deteccion falla en tu entorno),
-define la variable de entorno `CHROME_VERSION_MAIN` (tambien vale en `.env`):
+Para forzar una versión concreta, define `CHROME_VERSION_MAIN` (también vale en `.env`):
 
 ```
 CHROME_VERSION_MAIN=152
 ```
+
+### Sunarp responde "Tesseract no instalado"
+
+Instala Tesseract con el paquete de idioma español, o indica la ruta del ejecutable en
+`TESSERACT_CMD`.
+
+## Documentación
+
+- [Arquitectura](docs/architecture.md)
+- [Roadmap](docs/roadmap.md)
+- [Decisiones de arquitectura (ADR)](docs/adr/README.md)

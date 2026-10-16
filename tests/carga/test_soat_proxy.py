@@ -1,6 +1,6 @@
 """Prueba de estabilidad SOAT + proxy. Usa SOATScraper directamente (NO envia al webhook).
 
-Uso: python test_soat_proxy.py [placa] [total] [paralelo] [use_proxy 1/0]
+Uso: python -m tests.carga.test_soat_proxy [placa] [total] [paralelo] [use_proxy 1/0]
 """
 import sys
 import time

@@ -117,7 +117,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 8000
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ### 5.3. Crear docker-compose para la API
@@ -252,7 +252,7 @@ docker stats --no-stream
   ```
 - **Chrome en Docker**: el Dockerfile instala Chrome estable y sus deps. `undetected-chromedriver` descargara el ChromeDriver correspondiente automaticamente al arrancar.
 - **CapSolver**: la API key va en `docker-compose.yml` (environment). No la subas a git.
-- **Webhook**: el endpoint del webhook.site esta en `webhook.py`; cambialo si quieres otro destino.
+- **Webhook**: las URLs de SOAT/MTC estan en `app/compartido/webhook.py`; la de Sunarp en `WEBHOOK_SUNARP_URL`.
 
 
 ## 10. Deploy Produccion

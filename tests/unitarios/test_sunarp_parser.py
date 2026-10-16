@@ -1,4 +1,4 @@
-"""Pruebas del parser OCR de Sunarp. Uso: python test_sunarp_parser.py"""
+"""Pruebas del parser OCR de Sunarp. Uso: python -m tests.unitarios.test_sunarp_parser"""
 from app.procesos.sunarp.parser import parse_ocr_text, tiene_datos
 
 INLINE = """DATOS DEL VEHÍCULO

@@ -6,3 +6,8 @@ __pycache__/
 *.md
 run.bat
 probe_*.py
+tests/
+scripts/
+docs/
+reportes/
+.claude/

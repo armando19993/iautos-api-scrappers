@@ -19,10 +19,10 @@ def main():
     args = parser.parse_args()
 
     if not args.placa and not args.placas:
-        print("Uso: python main.py --placa ABC123")
-        print("     python main.py --placas ABC123,XYZ789")
-        print("     python main.py --placa ABC123 --mtc   # MTC CITV")
-        print("     python main.py --placa ABC123 --sunarp   # Sunarp vehicular")
+        print("Uso: python -m app.cli --placa ABC123")
+        print("     python -m app.cli --placas ABC123,XYZ789")
+        print("     python -m app.cli --placa ABC123 --mtc   # MTC CITV")
+        print("     python -m app.cli --placa ABC123 --sunarp   # Sunarp vehicular")
         return
 
     placas = []

@@ -1,6 +1,6 @@
 # Plan H3 · Scripts, tests, despliegue y documentación
 
-PRD: `.claude/prds/estructura-por-procesos.prd.md` · Estado: **Aprobado — pendiente de ejecución**
+PRD: `.claude/prds/estructura-por-procesos.prd.md` · Estado: **Completado salvo 3.8 (16/10/2026)**
 
 ## Movimientos (con `git mv`)
 
@@ -22,12 +22,26 @@ Los tests se ejecutan desde la raíz como módulos: `python -m tests.unitarios.t
 
 | # | Tarea | Validación | Estado |
 |---|---|---|---|
-| 3.1 | Mover CLI, scripts y tests; actualizar imports | Cada script/test arranca desde la raíz | Pendiente |
-| 3.2 | Dockerfile: `CMD ["uvicorn", "app.main:app", ...]` | Revisión; build en el VPS (no hay Docker local) | Pendiente |
-| 3.3 | `run.bat` → `python -m app.cli`; `.dockerignore` excluye `tests/`, `scripts/`, `reportes/`, `docs/` | Revisión | Pendiente |
-| 3.4 | `.gitignore`: agregar `reportes/` y `resultados_*.json` | `git status` no los muestra | Pendiente |
-| 3.4b | Limpieza: `git rm Hola.txt`; `git rm --cached api_err.log api_out.log resultados_sunarp.json` (quedan en disco) | Archivos fuera de git y presentes en disco | Pendiente |
-| 3.5 | Documentación viva: `CLAUDE.md`, `README.md` (estructura y comandos; quitar Playwright/`db.py` que no existen), `docs/architecture.md`, `docs/roadmap.md`, `docs/modules/estructura-por-procesos.md`, índice `docs/adr/README.md` | `grep` sin nombres viejos | Pendiente |
-| 3.6 | Guía corta "dónde va cada cosa" para el equipo (en `CLAUDE.md` y README): nuevo proceso = nueva carpeta en `procesos/` con `scraper/cliente`, `schemas`, `rutas`, `servicio` | Revisión | Pendiente |
-| 3.7 | Validación final: contrato, tests, smoke por proceso, `grep` de nombres antiguos | Todo en verde | Pendiente |
+| 3.1 | Mover CLI, scripts y tests; actualizar imports | Cada script/test arranca desde la raíz | Hecho |
+| 3.2 | Dockerfile: `CMD ["uvicorn", "app.main:app", ...]` | `uvicorn app.main:app` validado en H2; build de la imagen pendiente en el VPS (no hay Docker local) | Hecho |
+| 3.3 | `run.bat` → `python -m app.cli`; `.dockerignore` excluye `tests/`, `scripts/`, `reportes/`, `docs/` | Revisión | Hecho |
+| 3.4 | `.gitignore`: agregar `reportes/` y `resultados_*.json` | `git status` no los muestra | Hecho |
+| 3.4b | Limpieza: `git rm Hola.txt`; `git rm --cached api_err.log api_out.log resultados_sunarp.json` (quedan en disco) | Archivos fuera de git y presentes en disco | Hecho |
+| 3.5 | Documentación viva: `CLAUDE.md`, `README.md` (estructura y comandos; quitar Playwright/`db.py` que no existen), `docs/architecture.md`, `docs/roadmap.md`, `docs/modules/estructura-por-procesos.md`, índice `docs/adr/README.md` | `grep` sin nombres viejos | Hecho |
+| 3.6 | Guía corta "dónde va cada cosa" para el equipo (en `CLAUDE.md` y README): nuevo proceso = nueva carpeta en `procesos/` con `scraper/cliente`, `schemas`, `rutas`, `servicio` | Revisión | Hecho |
+| 3.7 | Validación final: contrato, tests, smoke por proceso, `grep` de nombres antiguos | Todo en verde | Hecho |
 | 3.8 | `/code-review` del branch, PR a `main` | Revisión aprobada | Pendiente |
+
+## Resultado
+
+- CLI, scripts, tests y guía de despliegue movidos con `git mv`. Scripts siguen la convención de
+  `probar_ocr.py` (agregan la raíz al `sys.path`) y se corren como `python scripts/x.py`; tests como
+  `python -m tests.<tipo>.<test>`.
+- Dockerfile arranca `app.main:app`; `run.bat` usa `python -m app.cli`; `.dockerignore` excluye
+  tests, scripts, docs, reportes y `.claude`; `.gitignore` agrega `reportes/` y `resultados_*.json`.
+- Limpieza: `Hola.txt` borrado; `api_err.log`, `api_out.log`, `resultados_sunarp.json` fuera de git (en disco).
+- Docs: README reescrito (quitaba Playwright/MariaDB/`db.py` inexistentes), `CLAUDE.md` actualizado,
+  nuevos `docs/architecture.md`, `docs/roadmap.md`, `docs/modules/estructura-por-procesos.md`.
+- Validación: contrato igual, parser 9 · ocr 14 · sync 18 ok como módulos, CLI y scripts arrancan,
+  sin referencias a rutas viejas.
+- Integrado el hotfix de MTC (PR #5) en la rama (merge `46ff610`).

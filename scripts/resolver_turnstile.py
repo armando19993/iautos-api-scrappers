@@ -1,3 +1,12 @@
+"""Resuelve un Cloudflare Turnstile con CapSolver (herramienta manual).
+
+Uso: python scripts/resolver_turnstile.py
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import requests
 import time
 from app.core.config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES

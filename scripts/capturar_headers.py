@@ -1,3 +1,12 @@
+"""Captura cabeceras de red con Chrome (herramienta manual de depuracion).
+
+Uso: python scripts/capturar_headers.py
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import undetected_chromedriver as uc
 import json, time
 from app.compartido.chrome import create_driver
