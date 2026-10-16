@@ -85,3 +85,50 @@ print("ok >3 propietarios")
 sin = parse_ocr_text("Captcha no resuelto\n\nPor favor resuelva el captcha antes de continuar", 3, "AXY340")
 assert not tiene_datos(sin) and sin["Veh_Marca"] is None
 print("ok sin datos")
+
+# ── Fixture real de Tesseract (psm 6, spa) con nombres ficticios ──
+REAL = """ee Consulta
+sunarpl © Vehicular
+DATOS DEL VEHÍCULO
+N* PLACA: ABC123
+N* SERIE: EL400016143
+Ne VIN:
+N* MOTOR: 262496256
+COLOR: ROJO
+MARCA: TOYOTA
+MODELO: EL40-AEMDS COROLLA TERCEL
+PLACAVIGENTE: ABC123
+PLACA ANTERIOR: B05358
+ESTADO: EN CIRCULACION
+ANOTACIONES: — NINGUNA
+SEDE: LIMA
+AÑO DE MODELO:
+PROPIETARIO(S):
+GOMEZ GONZALES, JOSEPH
+GOMEZ SICCHA, JOSEPH ALEJANDRO
+SICCHA MACASSI, LUPE ELIZABETH
+15/10/2026 22:52:32"""
+
+ESPERADO_REAL = {
+    "Veh_EmpId": 7, "Veh_NumeroPlaca": "ABC123", "Veh_NumeroVin": None,
+    "Veh_NumeroMotor": "262496256", "Veh_Color": "ROJO", "Veh_Marca": "TOYOTA",
+    "Veh_Modelo": "EL40-AEMDS COROLLA TERCEL", "Veh_EstadoSunarp": "EN CIRCULACION",
+    "Veh_Sede": "LIMA",
+    "Veh_Propietario1": "GOMEZ GONZALES JOSEPH",
+    "Veh_Propietario2": "GOMEZ SICCHA JOSEPH ALEJANDRO",
+    "Veh_Propietario3": "SICCHA MACASSI LUPE ELIZABETH",
+}
+got = parse_ocr_text(REAL, 7, "abc123")
+assert got == ESPERADO_REAL, f"real:\n got={got}\n exp={ESPERADO_REAL}"
+assert tiene_datos(got)
+print("ok fixture real (VIN vacio -> None, fecha no es propietario)")
+
+# placa vigente/anterior no pisan la placa; prefijos y minusculas tolerados
+v = parse_ocr_text("n* placa: ZZZ999\nNe vin: abc\nn° Motor : m1\nplacavigente: QQQ111\nmarca: kia", 1, "AAA111")
+assert v["Veh_NumeroPlaca"] == "AAA111" and v["Veh_NumeroVin"] == "ABC" and v["Veh_NumeroMotor"] == "M1" and v["Veh_Marca"] == "KIA"
+print("ok etiquetas tolerantes")
+
+# linea vacia corta la seccion de propietarios
+v = parse_ocr_text("MARCA: X\nPROPIETARIO(S):\nA B, C\n\nRUIDO FINAL", 1, "AAA111")
+assert v["Veh_Propietario1"] == "A B C" and v["Veh_Propietario2"] == "SIN INFORMACION"
+print("ok linea vacia corta propietarios")

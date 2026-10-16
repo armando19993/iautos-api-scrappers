@@ -29,3 +29,12 @@ WEBHOOK_SUNARP_INSERT_RETRIES = max(0, min(2, int(os.getenv("WEBHOOK_SUNARP_INSE
 SUNARP_POOL_SIZE = max(1, int(os.getenv("SUNARP_POOL_SIZE", "5")))
 # Segundos que un request sync espera un cliente libre antes de responder 503.
 SUNARP_SYNC_WAIT_SECONDS = float(os.getenv("SUNARP_SYNC_WAIT_SECONDS", "30"))
+
+# OCR de Sunarp (Tesseract). TESSERACT_CMD vacio = autodeteccion.
+TESSERACT_CMD = os.getenv("TESSERACT_CMD", "")
+SUNARP_OCR_PREPROCESS = os.getenv("SUNARP_OCR_PREPROCESS", "1").strip().lower() not in ("0", "false", "no", "")
+SUNARP_OCR_SCALE = max(1.0, min(4.0, float(os.getenv("SUNARP_OCR_SCALE", "2"))))
+SUNARP_OCR_THRESHOLD = max(0, min(255, int(os.getenv("SUNARP_OCR_THRESHOLD", "150"))))
+SUNARP_OCR_PSM = os.getenv("SUNARP_OCR_PSM", "auto").strip().lower()
+if SUNARP_OCR_PSM not in ("auto", "4", "6"):
+    SUNARP_OCR_PSM = "auto"
