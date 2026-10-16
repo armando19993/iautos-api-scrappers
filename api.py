@@ -4,7 +4,7 @@ import time
 import queue
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, Field
@@ -15,7 +15,9 @@ from starlette.responses import Response
 from scraper import SOATScraper
 from mtc_scraper import MTCScraper
 from sunarp_api import SunarpHTTP
-from webhook import send_to_webhook
+from webhook import send_to_webhook, send_sunarp_webhook
+from config import SUNARP_POOL_SIZE, SUNARP_SYNC_WAIT_SECONDS, SUNARP_WEBHOOK_ENABLED, WEBHOOK_SUNARP_INSERT_RETRIES
+from sunarp_parser import parse_ocr_text, tiene_datos
 
 
 class SunarpHTTPPool:
@@ -34,7 +36,8 @@ class SunarpHTTPPool:
             self._queue.put(c)
         print(f"[SunarpPool] Pool listo: {self.size} clientes disponibles")
 
-    def acquire(self, timeout=30) -> SunarpHTTP:
+    def acquire(self, timeout: Optional[float] = 30) -> SunarpHTTP:
+        """timeout=None espera indefinidamente (jobs async: se encolan)."""
         try:
             return self._queue.get(timeout=timeout)
         except queue.Empty:
@@ -46,8 +49,8 @@ class SunarpHTTPPool:
     def release(self, client: SunarpHTTP):
         self._queue.put(client)
 
-    def consultar(self, placa: str) -> dict:
-        client = self.acquire()
+    def consultar(self, placa: str, timeout: Optional[float] = 30) -> dict:
+        client = self.acquire(timeout)
         try:
             return client.consultar(placa)
         finally:
@@ -63,13 +66,16 @@ class SunarpHTTPPool:
 
 # ── Instancia global del pool ──
 _sunarp_pool: SunarpHTTPPool | None = None
+_sunarp_pool_lock = threading.Lock()
 
 
 def _get_sunarp_pool() -> SunarpHTTPPool:
     global _sunarp_pool
-    if _sunarp_pool is None:
-        _sunarp_pool = SunarpHTTPPool(size=5)
-        _sunarp_pool.start()
+    with _sunarp_pool_lock:
+        if _sunarp_pool is None:
+            pool = SunarpHTTPPool(size=SUNARP_POOL_SIZE)
+            pool.start()
+            _sunarp_pool = pool
     return _sunarp_pool
 
 
@@ -310,15 +316,15 @@ class SunarpRequest(BaseModel):
         description="Placa del vehículo a consultar. Se normaliza a mayúsculas.",
         examples=["ABC123"],
     )
-    vehiculoId: int = Field(
-        ...,
-        description="ID interno del vehículo en IAUTOS. Se reenvía en la respuesta.",
-        examples=[42],
+    empresaId: int = Field(
+        ..., ge=0, le=255,
+        description="ID de la empresa (`Veh_EmpId`, tinyint) a la que se asocia el vehículo.",
+        examples=[3],
     )
 
     model_config = {
         "json_schema_extra": {
-            "examples": [{"placa": "ABC123", "vehiculoId": 42}]
+            "examples": [{"placa": "ABC123", "empresaId": 3}]
         }
     }
 
@@ -412,7 +418,22 @@ class SunarpResponse(BaseModel):
     """Resultado de una consulta vehicular en Sunarp."""
     success: bool = Field(..., description="`true` si se obtuvo la tarjeta vehicular.")
     placa: str = Field(..., examples=["ABC123"])
-    vehiculoId: Optional[int] = Field(None, examples=[42])
+    operacion: Optional[str] = Field(
+        None, examples=["datos_vehiculo"],
+        description="`datos_vehiculo` cuando el webhook está apagado (`SUNARP_WEBHOOK_ENABLED=false`); "
+                    "`null` si falló.",
+    )
+    empresaId: Optional[int] = Field(None, examples=[3], description="Empresa recibida en la petición.")
+    vehiculo: Optional[Dict[str, Optional[str]]] = Field(
+        None,
+        description="Datos parseados del OCR con las columnas `Veh_*` de la tabla `vehiculo` "
+                    "(sin `Veh_EmpId`). Campos vacíos = `null`; propietarios faltantes = `SIN INFORMACION`.",
+    )
+    vehiculoId: Optional[int] = Field(
+        None, examples=[42],
+        description="Solo con `SUNARP_WEBHOOK_ENABLED=true`: `Veh_Id` devuelto por el webhook de inserción; "
+                    "`null` si no se pudo registrar. Con el webhook apagado no se incluye.",
+    )
     result_image_base64: Optional[str] = Field(
         None,
         description="Tarjeta de identificación vehicular como data URI PNG en base64.",
@@ -427,6 +448,15 @@ class SunarpResponse(BaseModel):
     error: Optional[str] = Field(
         None, description="Mensaje de error cuando `success` es `false`."
     )
+    webhook: Optional[Dict[str, Any]] = Field(
+        None, description="Respuesta del webhook de inserción de vehículo."
+    )
+
+
+class SunarpAsyncAcceptedResponse(BaseModel):
+    """Acuse de una consulta Sunarp asíncrona. El `vehiculoId` lo genera el receptor del webhook."""
+    status: str = Field("accepted", examples=["accepted"])
+    placa: str = Field(..., examples=["ABC123"])
 
 
 class AsyncAcceptedResponse(BaseModel):
@@ -817,7 +847,21 @@ def mtc_sync_get(placa: str, vehiculoId: int, use_proxy: bool = True):
                                 "ocr_text": "PLACA: ABC123\nMARCA: TOYOTA\nMODELO: YARIS\nAÑO: 2020",
                                 "raw_response": {"model": {"imagen": "..."}},
                                 "tiempo_segundos": 3.1,
-                                "vehiculoId": 42,
+                                "operacion": "datos_vehiculo",
+                                "empresaId": 3,
+                                "vehiculo": {
+                                    "Veh_NumeroPlaca": "ABC123",
+                                    "Veh_NumeroVin": None,
+                                    "Veh_NumeroMotor": "262496256",
+                                    "Veh_Color": "ROJO",
+                                    "Veh_Marca": "TOYOTA",
+                                    "Veh_Modelo": "YARIS",
+                                    "Veh_EstadoSunarp": "EN CIRCULACION",
+                                    "Veh_Sede": "LIMA",
+                                    "Veh_Propietario1": "GOMEZ GONZALES JOSEPH",
+                                    "Veh_Propietario2": "SIN INFORMACION",
+                                    "Veh_Propietario3": "SIN INFORMACION",
+                                },
                             },
                         },
                         "sin_resultado": {
@@ -827,7 +871,21 @@ def mtc_sync_get(placa: str, vehiculoId: int, use_proxy: bool = True):
                                 "placa": "ABC123",
                                 "error": "HTTP 404: no se encontró el vehículo",
                                 "tiempo_segundos": 2.4,
-                                "vehiculoId": 42,
+                                "operacion": None,
+                                "empresaId": 3,
+                                "vehiculo": None,
+                            },
+                        },
+                        "insert_fallido": {
+                            "summary": "Scraping OK pero el webhook de inserción falló",
+                            "value": {
+                                "success": False,
+                                "placa": "ABC123",
+                                "error": "No se pudo registrar el vehículo: timeout",
+                                "ocr_text": "Nº PLACA: ABC123 ...",
+                                "tiempo_segundos": 3.4,
+                                "vehiculoId": None,
+                                "webhook": {"webhook_error": "timeout"},
                             },
                         },
                     }
@@ -837,21 +895,30 @@ def mtc_sync_get(placa: str, vehiculoId: int, use_proxy: bool = True):
         400: RESP_400_PLACA,
         422: RESP_422,
         500: RESP_500,
+        503: {
+            "model": ErrorDetail,
+            "description": "Todos los clientes Sunarp están ocupados; reintente en unos segundos.",
+            "content": {"application/json": {"example": {"detail": "Servicio Sunarp saturado: sin cliente disponible, reintente en unos segundos"}}},
+        },
     },
 )
 def sunarp_sync(req: SunarpRequest):
-    """Consulta vehicular en Sunarp vía HTTP directo (~3s).
-    Thread-safe: el pool asigna un cliente HTTP disponible."""
+    """Consulta vehicular en Sunarp (~3s) y devuelve los datos extraídos (`operacion: datos_vehiculo`,
+    `empresaId`, `vehiculo`). Con `SUNARP_WEBHOOK_ENABLED=true` además registra el vehículo vía webhook
+    y devuelve el `Veh_Id` en `vehiculoId`.
+    Thread-safe: el pool (compartido con el modo async) asigna un cliente HTTP libre."""
     placa = req.placa.strip().upper()
     if not placa:
         raise HTTPException(status_code=400, detail="placa requerida")
-
-    pool = _get_sunarp_pool()
-    result = pool.consultar(placa)
-    if not result.get("placa"):
-        result["placa"] = placa
-    result["vehiculoId"] = req.vehiculoId
-    return result
+    try:
+        if SUNARP_WEBHOOK_ENABLED:
+            return _procesar_sunarp(placa, req.empresaId, SUNARP_SYNC_WAIT_SECONDS)
+        return _consultar_sunarp_datos(placa, req.empresaId, SUNARP_SYNC_WAIT_SECONDS)
+    except TimeoutError:
+        raise HTTPException(
+            status_code=503,
+            detail="Servicio Sunarp saturado: sin cliente disponible, reintente en unos segundos",
+        )
 
 
 @app.post(
@@ -860,14 +927,15 @@ def sunarp_sync(req: SunarpRequest):
     summary="Consultar registro vehicular (asíncrono)",
     response_description="Acuse de recibo. El resultado se procesa en segundo plano.",
     responses={
-        200: {"model": AsyncAcceptedResponse, "description": "Tarea aceptada y encolada."},
+        200: {"model": SunarpAsyncAcceptedResponse, "description": "Tarea aceptada y encolada."},
         400: RESP_400_PLACA,
         422: RESP_422,
     },
 )
 def sunarp_async(req: SunarpRequest, bg: BackgroundTasks):
-    """Encola la consulta Sunarp en segundo plano y responde de inmediato."""
-    return _sunarp_async_common(req.placa, req.vehiculoId, bg)
+    """Encola la consulta Sunarp en segundo plano y responde de inmediato (sin `vehiculoId`:
+    lo genera el receptor del webhook al registrar el vehículo)."""
+    return _sunarp_async_common(req.placa, req.empresaId, bg)
 
 
 @app.get(
@@ -876,20 +944,25 @@ def sunarp_async(req: SunarpRequest, bg: BackgroundTasks):
     summary="Consultar registro vehicular (asíncrono, vía GET)",
     response_description="Acuse de recibo. El resultado se procesa en segundo plano.",
     responses={
-        200: {"model": AsyncAcceptedResponse, "description": "Tarea aceptada y encolada."},
+        200: {"model": SunarpAsyncAcceptedResponse, "description": "Tarea aceptada y encolada."},
         400: RESP_400_PLACA,
+        422: RESP_422,
     },
 )
-def sunarp_async_get(placa: str, vehiculoId: int, bg: BackgroundTasks = BackgroundTasks()):
-    return _sunarp_async_common(placa, vehiculoId, bg)
+def sunarp_async_get(
+    bg: BackgroundTasks,
+    placa: str,
+    empresaId: int = Query(..., ge=0, le=255),
+):
+    return _sunarp_async_common(placa, empresaId, bg)
 
 
-def _sunarp_async_common(placa: str, vehiculoId: int, bg: BackgroundTasks):
+def _sunarp_async_common(placa: str, empresaId: int, bg: BackgroundTasks):
     placa = placa.strip().upper()
     if not placa:
         raise HTTPException(status_code=400, detail="placa requerida")
-    bg.add_task(_run_sunarp_async_task, placa, vehiculoId)
-    return {"status": "accepted", "placa": placa, "vehiculoId": vehiculoId, "webhook": "se enviara al terminar"}
+    bg.add_task(_run_sunarp_async_task, placa, empresaId)
+    return {"status": "accepted", "placa": placa}
 
 
 @app.get(
@@ -900,14 +973,19 @@ def _sunarp_async_common(placa: str, vehiculoId: int, bg: BackgroundTasks):
     responses={
         200: {"model": SunarpResponse, "description": "Consulta completada."},
         400: RESP_400_PLACA,
+        422: RESP_422,
         500: RESP_500,
+        503: {"model": ErrorDetail, "description": "Todos los clientes Sunarp están ocupados."},
     },
 )
-def sunarp_sync_get(placa: str, vehiculoId: int):
+def sunarp_sync_get(
+    placa: str,
+    empresaId: int = Query(..., ge=0, le=255),
+):
     """Atajo GET para probar rápido.
-    Ej: `GET /sunarp/ABC123?vehiculoId=42`
+    Ej: `GET /sunarp/ABC123?empresaId=3`
     """
-    return sunarp_sync(SunarpRequest(placa=placa, vehiculoId=vehiculoId))
+    return sunarp_sync(SunarpRequest(placa=placa, empresaId=empresaId))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -957,20 +1035,95 @@ def _run_mtc_async_task(placa: str, vehiculoId: int, use_proxy: bool = False):
     t.start()
 
 
-def _run_sunarp_async_task(placa: str, vehiculoId: int):
-    """Consulta Sunarp via HTTP directo en un hilo separado."""
+_VEHICULO_CAMPOS = (
+    "Veh_NumeroPlaca", "Veh_NumeroVin", "Veh_NumeroMotor", "Veh_Color", "Veh_Marca", "Veh_Modelo",
+    "Veh_EstadoSunarp", "Veh_Sede", "Veh_Propietario1", "Veh_Propietario2", "Veh_Propietario3",
+)
+
+
+def _consultar_sunarp_datos(placa: str, empresaId: int, acquire_timeout: Optional[float]) -> dict:
+    """Flujo sincrono con el webhook apagado: scraping/OCR + parseo, SIN llamar al webhook ni
+    devolver `vehiculoId`. Lanza TimeoutError si no hay cliente libre dentro de `acquire_timeout`."""
+    result = _get_sunarp_pool().consultar(placa, timeout=acquire_timeout)
+    if not result.get("placa"):
+        result["placa"] = placa
+    result["empresaId"] = empresaId
+    result["operacion"] = None
+    result["vehiculo"] = None
+
+    def _fail(msg: str):
+        result["success"] = False
+        result["error"] = msg
+        return result
+
+    if not result.get("success"):
+        return result
+    ocr_error = result.pop("ocr_error", None)
+    if ocr_error:
+        return _fail(ocr_error)  # Tesseract no instalado
+    ocr_text = result.get("ocr_text") or ""
+    if not ocr_text.strip():
+        return _fail("OCR vacío: no se pudo leer la tarjeta vehicular")
+    parsed = parse_ocr_text(ocr_text, empresaId, placa)
+    if not tiene_datos(parsed):
+        return _fail("Texto OCR sin datos de vehículo")
+    if not (parsed["Veh_NumeroPlaca"] and parsed["Veh_Marca"] and parsed["Veh_Modelo"]):
+        return _fail("Datos de vehículo incompletos: falta marca o modelo")
+    result["operacion"] = "datos_vehiculo"
+    result["vehiculo"] = {k: parsed[k] for k in _VEHICULO_CAMPOS}
+    return result
+
+
+def _procesar_sunarp(placa: str, empresaId: int, acquire_timeout: Optional[float]) -> dict:
+    """Flujo completo Sunarp: scraping/OCR, parseo,
+    INSERT por webhook y `vehiculoId` = Veh_Id. Lanza TimeoutError si no hay cliente libre
+    dentro de `acquire_timeout` (None = esperar)."""
+    result = _get_sunarp_pool().consultar(placa, timeout=acquire_timeout)
+    if not result.get("placa"):
+        result["placa"] = placa
+    result["vehiculoId"] = None
+    if not result.get("success"):
+        return result
+
+    def _fail(msg: str):
+        result["success"] = False
+        result["error"] = msg
+        return result
+
+    ocr_error = result.pop("ocr_error", None)
+    if ocr_error:
+        return _fail(ocr_error)  # Tesseract no instalado
+    ocr_text = result.get("ocr_text") or ""
+    if not ocr_text.strip():
+        return _fail("OCR vacío: no se pudo leer la tarjeta vehicular")
+    vehiculo = parse_ocr_text(ocr_text, empresaId, placa)
+    if not tiene_datos(vehiculo):
+        return _fail("Texto OCR sin datos de vehículo")
+
+    ins = send_sunarp_webhook(
+        {"operacion": "insertar_vehiculo", "empresaId": empresaId, "vehiculo": vehiculo},
+        retries=WEBHOOK_SUNARP_INSERT_RETRIES,
+    )
+    result["webhook"] = ins
+    veh_id = ins.get("vehiculoId")
+    if ins.get("success") is True and isinstance(veh_id, int) and not isinstance(veh_id, bool) and veh_id > 0:
+        result["vehiculoId"] = veh_id
+        print(f"[sunarp] placa={placa} vehiculoId={veh_id} accion={ins.get('accion')}")
+        return result
+    motivo = ins.get("error") or ins.get("webhook_error") or "respuesta inválida del webhook (success/vehiculoId)"
+    print(f"[sunarp] ERROR insert placa={placa}: {ins}")
+    return _fail(f"No se pudo registrar el vehículo: {motivo}")
+
+
+def _run_sunarp_async_task(placa: str, empresaId: int):
+    """Corre el flujo Sunarp en un hilo; si el pool esta lleno el job espera su turno."""
     def _work():
-        scraper = SunarpHTTP()
         try:
-            result = scraper.consultar(placa)
-            if not result.get("placa"):
-                result["placa"] = placa
-            result["vehiculoId"] = vehiculoId
+            result = _procesar_sunarp(placa, empresaId, None)
         except Exception as e:
-            result = {"placa": placa, "vehiculoId": vehiculoId, "success": False, "error": str(e)}
-        finally:
-            scraper.close()
-        print(f"[sunarp_async] placa={placa} vehiculoId={vehiculoId} success={result.get('success')}")
+            result = {"placa": placa, "success": False, "error": str(e), "vehiculoId": None}
+        print(f"[sunarp_async] placa={placa} vehiculoId={result.get('vehiculoId')} "
+              f"success={result.get('success')} error={result.get('error')}")
 
     t = threading.Thread(target=_work, daemon=True)
     t.start()

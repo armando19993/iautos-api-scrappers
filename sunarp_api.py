@@ -4,24 +4,10 @@ import io
 
 import httpx
 from PIL import Image
-import pytesseract
 
 from config import CAPSOLVER_API_KEY, SUNARP_URL
 from captcha_solver import CaptchaSolver
-
-# ── Configurar Tesseract para Windows ──
-import os
-for _p in [
-    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-]:
-    if os.path.exists(_p):
-        pytesseract.pytesseract.tesseract_cmd = _p
-        break
-
-_user_tessdata = os.path.expanduser(r"~\.tesseract\tessdata")
-if os.path.exists(_user_tessdata):
-    os.environ["TESSDATA_PREFIX"] = _user_tessdata
+from sunarp_ocr import ocr_tarjeta, TesseractNoInstalado
 
 # ── Endpoints y constantes ──
 API_URL = "https://api-gateway.sunarp.gob.pe:9443/sunarp/multiservicios/multiservicio-consvehicular/consulta/getDatosVehiculo"
@@ -79,13 +65,17 @@ class SunarpHTTP:
 
             # 4. OCR
             ocr_text = ""
+            ocr_error = None
             if result_image_b64:
-                ocr_text = self._ocr_image(result_image_b64)
+                try:
+                    ocr_text = self._ocr_image(result_image_b64)
+                except TesseractNoInstalado as e:
+                    ocr_error = str(e)
 
             elapsed = round(time.time() - t_start, 1)
             print(f"[SunarpHTTP] Completado en {elapsed}s")
 
-            return {
+            out = {
                 "success": True,
                 "placa": placa,
                 "result_image_base64": result_image_b64,
@@ -93,6 +83,9 @@ class SunarpHTTP:
                 "raw_response": result,
                 "tiempo_segundos": elapsed,
             }
+            if ocr_error:
+                out["ocr_error"] = ocr_error
+            return out
 
         except Exception as e:
             return {
@@ -147,21 +140,17 @@ class SunarpHTTP:
         return ""
 
     def _ocr_image(self, image_b64: str) -> str:
+        """Texto OCR de la tarjeta; '' si no se pudo leer. TesseractNoInstalado se propaga."""
         try:
             raw = image_b64.split(",")[1] if "," in image_b64 else image_b64
-            img_data = base64.b64decode(raw)
-            img = Image.open(io.BytesIO(img_data))
+            img = Image.open(io.BytesIO(base64.b64decode(raw)))
             print(f"[SunarpHTTP] OCR: imagen {img.size[0]}x{img.size[1]} {img.mode}")
-
-            try:
-                text = pytesseract.image_to_string(img, lang="spa")
-            except Exception:
-                text = pytesseract.image_to_string(img)
-
-            text = text.strip()
+            text = ocr_tarjeta(img)
             if text:
                 print(f"[SunarpHTTP] OCR extrajo {len(text)} caracteres")
             return text
+        except TesseractNoInstalado:
+            raise
         except Exception as e:
             print(f"[SunarpHTTP] Error OCR: {e}")
             return ""
