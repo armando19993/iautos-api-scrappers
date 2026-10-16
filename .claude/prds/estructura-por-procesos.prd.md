@@ -54,7 +54,7 @@ el comportamiento de la API**: mismas rutas, métodos, parámetros, modelos y re
 |---|---|---|---|
 | H0 | Rama de trabajo + test de contrato (línea base) | `.claude/plans/h0-linea-base.plan.md` | Completado |
 | H1 | Mover y renombrar módulos por proceso (sin partir `api.py`) | `.claude/plans/h1-mover-modulos.plan.md` | Completado |
-| H2 | Partir `api.py` en rutas/schemas/servicios por proceso | `.claude/plans/h2-partir-api.plan.md` | Aprobado, pendiente |
+| H2 | Partir `api.py` en rutas/schemas/servicios por proceso | `.claude/plans/h2-partir-api.plan.md` | Completado |
 | H3 | Scripts, tests, despliegue y documentación | `.claude/plans/h3-despliegue-docs.plan.md` | Aprobado, pendiente |
 | H4 | (Opcional) Guardarraíles del equipo: CI, plantilla de PR, protección de `main`, secretos a env | — | Fuera de alcance (decisión 16/10/2026) |
 
@@ -74,6 +74,7 @@ el comportamiento de la API**: mismas rutas, métodos, parámetros, modelos y re
 | Comandos de arranque externos (`uvicorn api:app` en el VPS o en scripts de alguien) | Se mantiene un `api.py` mínimo de compatibilidad durante la transición (ver ADR 0001) |
 | Los tests parchean `api._get_sunarp_pool`, `api.SUNARP_WEBHOOK_ENABLED`, etc. | Las rutas delegan en `servicio.py`; los parches apuntan a ese módulo y se verifica que el test falle si el parche no aplica |
 | Ramas abiertas de otras personas quedan en conflicto | Hacer el refactor en una rama corta y avisar antes de mergear; `git mv` ayuda a Git a seguir los renombres |
+| FastAPI sin versión fijada: 0.143 cambió la forma de `app.routes` con `include_router` | El test de contrato aplana las rutas; evaluar fijar versiones en `requirements.txt` |
 | `load_dotenv()` y rutas relativas dependen del directorio de trabajo | Se sigue arrancando desde la raíz; se valida con uvicorn real |
 
 ## 8. Decisiones (16/10/2026)

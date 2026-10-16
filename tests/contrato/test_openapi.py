@@ -23,14 +23,23 @@ SNAPSHOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "openapi.sna
 RUTAS_PROTEGIDAS = ("/docs", "/redoc", "/openapi.json")
 
 
+def _rutas_efectivas(routes, prefijo=""):
+    """Aplana la tabla de rutas en el orden en que se resuelven las peticiones.
+    Desde FastAPI 0.14x `include_router` deja un `_IncludedRouter` (con `original_router`)
+    en lugar de copiar las rutas; se recorre para comparar las rutas reales."""
+    for r in routes:
+        router = getattr(r, "original_router", None)
+        if router is not None:
+            contexto = getattr(r, "include_context", None)
+            yield from _rutas_efectivas(router.routes, prefijo + (getattr(contexto, "prefix", "") or ""))
+        else:
+            yield {"path": prefijo + r.path, "methods": sorted(getattr(r, "methods", None) or []),
+                   "en_schema": getattr(r, "include_in_schema", True)}
+
+
 def contrato_actual(app=None):
     app = app or api.app
-    rutas = [
-        {"path": r.path, "methods": sorted(getattr(r, "methods", None) or []),
-         "en_schema": getattr(r, "include_in_schema", True)}
-        for r in app.routes
-    ]
-    return {"openapi": app.openapi(), "rutas": rutas}
+    return {"openapi": app.openapi(), "rutas": list(_rutas_efectivas(app.routes))}
 
 
 def serializar(contrato):

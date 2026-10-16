@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 import api
 import app.compartido.webhook as webhook
+import app.procesos.sunarp.servicio as sunarp_servicio
 from test_sunarp_parser import REAL
 
 LLAMADAS_HTTP = []
@@ -28,13 +29,13 @@ def ok_result(**extra):
 
 
 def get(c, pool, placa="ABC123"):
-    api._get_sunarp_pool = lambda: pool
+    sunarp_servicio._get_sunarp_pool = lambda: pool
     return c.get(f"/sunarp/{placa}", params={"empresaId": 3}).json()
 
 
 c = TestClient(api.app)
-api.SUNARP_WEBHOOK_ENABLED = False
-api.send_sunarp_webhook = _prohibido
+sunarp_servicio.SUNARP_WEBHOOK_ENABLED = False
+sunarp_servicio.send_sunarp_webhook = _prohibido
 httpx.Client = _prohibido  # cualquier cliente HTTP nuevo falla el test
 
 # 1. exito con el fixture ABC123, webhook apagado
@@ -55,7 +56,7 @@ print("ok sync exito, webhook apagado, sin llamadas HTTP")
 
 # 1b. POST /sunarp y WEBHOOK_SUNARP_URL vacia: no hace falta configurarla
 webhook.WEBHOOK_SUNARP_URL = ""
-api._get_sunarp_pool = lambda: FakePool(ok_result())
+sunarp_servicio._get_sunarp_pool = lambda: FakePool(ok_result())
 r = c.post("/sunarp", json={"placa": "abc123", "empresaId": 3, "platemId": 9}).json()
 assert r["success"] is True and r["vehiculo"]["Veh_NumeroPlaca"] == "ABC123" and "vehiculoId" not in r
 print("ok POST /sunarp sin WEBHOOK_SUNARP_URL")
@@ -82,18 +83,18 @@ assert LLAMADAS_HTTP == []
 
 # 3. con el flag en true se comporta como antes (INSERT + vehiculoId)
 enviados = []
-api.SUNARP_WEBHOOK_ENABLED = True
-api.send_sunarp_webhook = lambda payload, retries=0: (enviados.append(payload) or {"success": True, "vehiculoId": 39958})
+sunarp_servicio.SUNARP_WEBHOOK_ENABLED = True
+sunarp_servicio.send_sunarp_webhook = lambda payload, retries=0: (enviados.append(payload) or {"success": True, "vehiculoId": 39958})
 r = get(c, FakePool(ok_result()))
 assert r["success"] is True and r["vehiculoId"] == 39958 and "operacion" not in r
 assert enviados[0]["operacion"] == "insertar_vehiculo" and enviados[0]["vehiculo"]["Veh_EmpId"] == 3
 print("ok flag true: INSERT + vehiculoId")
 
 # 4. async no cambia: con el flag apagado igual intenta el webhook y, sin URL, solo falla y lo registra
-api.SUNARP_WEBHOOK_ENABLED = False
-api.send_sunarp_webhook = webhook.send_sunarp_webhook  # real, sin URL -> {"webhook_error": ...}
-api._get_sunarp_pool = lambda: FakePool(ok_result())
-r = api._procesar_sunarp("ABC123", 3, None)
+sunarp_servicio.SUNARP_WEBHOOK_ENABLED = False
+sunarp_servicio.send_sunarp_webhook = webhook.send_sunarp_webhook  # real, sin URL -> {"webhook_error": ...}
+sunarp_servicio._get_sunarp_pool = lambda: FakePool(ok_result())
+r = sunarp_servicio._procesar_sunarp("ABC123", 3, None)
 assert r["success"] is False and "WEBHOOK_SUNARP_URL no configurada" in r["error"] and r["vehiculoId"] is None
 assert r["ocr_text"] and r["result_image_base64"]
 print("ok async (sin cambios): intenta el webhook, registra el error")
