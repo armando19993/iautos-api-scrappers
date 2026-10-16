@@ -16,7 +16,7 @@ from scraper import SOATScraper
 from mtc_scraper import MTCScraper
 from sunarp_api import SunarpHTTP
 from webhook import send_to_webhook, send_sunarp_webhook
-from config import SUNARP_POOL_SIZE, SUNARP_SYNC_WAIT_SECONDS, WEBHOOK_SUNARP_INSERT_RETRIES
+from config import SUNARP_POOL_SIZE, SUNARP_SYNC_WAIT_SECONDS, SUNARP_WEBHOOK_ENABLED, WEBHOOK_SUNARP_INSERT_RETRIES
 from sunarp_parser import parse_ocr_text, tiene_datos
 
 
@@ -418,9 +418,21 @@ class SunarpResponse(BaseModel):
     """Resultado de una consulta vehicular en Sunarp."""
     success: bool = Field(..., description="`true` si se obtuvo la tarjeta vehicular.")
     placa: str = Field(..., examples=["ABC123"])
+    operacion: Optional[str] = Field(
+        None, examples=["datos_vehiculo"],
+        description="`datos_vehiculo` cuando el webhook está apagado (`SUNARP_WEBHOOK_ENABLED=false`); "
+                    "`null` si falló.",
+    )
+    empresaId: Optional[int] = Field(None, examples=[3], description="Empresa recibida en la petición.")
+    vehiculo: Optional[Dict[str, Optional[str]]] = Field(
+        None,
+        description="Datos parseados del OCR con las columnas `Veh_*` de la tabla `vehiculo` "
+                    "(sin `Veh_EmpId`). Campos vacíos = `null`; propietarios faltantes = `SIN INFORMACION`.",
+    )
     vehiculoId: Optional[int] = Field(
         None, examples=[42],
-        description="`Veh_Id` devuelto por el webhook de inserción; `null` si no se pudo registrar.",
+        description="Solo con `SUNARP_WEBHOOK_ENABLED=true`: `Veh_Id` devuelto por el webhook de inserción; "
+                    "`null` si no se pudo registrar. Con el webhook apagado no se incluye.",
     )
     result_image_base64: Optional[str] = Field(
         None,
@@ -835,7 +847,21 @@ def mtc_sync_get(placa: str, vehiculoId: int, use_proxy: bool = True):
                                 "ocr_text": "PLACA: ABC123\nMARCA: TOYOTA\nMODELO: YARIS\nAÑO: 2020",
                                 "raw_response": {"model": {"imagen": "..."}},
                                 "tiempo_segundos": 3.1,
-                                "vehiculoId": 42,
+                                "operacion": "datos_vehiculo",
+                                "empresaId": 3,
+                                "vehiculo": {
+                                    "Veh_NumeroPlaca": "ABC123",
+                                    "Veh_NumeroVin": None,
+                                    "Veh_NumeroMotor": "262496256",
+                                    "Veh_Color": "ROJO",
+                                    "Veh_Marca": "TOYOTA",
+                                    "Veh_Modelo": "YARIS",
+                                    "Veh_EstadoSunarp": "EN CIRCULACION",
+                                    "Veh_Sede": "LIMA",
+                                    "Veh_Propietario1": "GOMEZ GONZALES JOSEPH",
+                                    "Veh_Propietario2": "SIN INFORMACION",
+                                    "Veh_Propietario3": "SIN INFORMACION",
+                                },
                             },
                         },
                         "sin_resultado": {
@@ -845,7 +871,9 @@ def mtc_sync_get(placa: str, vehiculoId: int, use_proxy: bool = True):
                                 "placa": "ABC123",
                                 "error": "HTTP 404: no se encontró el vehículo",
                                 "tiempo_segundos": 2.4,
-                                "vehiculoId": None,
+                                "operacion": None,
+                                "empresaId": 3,
+                                "vehiculo": None,
                             },
                         },
                         "insert_fallido": {
@@ -875,14 +903,17 @@ def mtc_sync_get(placa: str, vehiculoId: int, use_proxy: bool = True):
     },
 )
 def sunarp_sync(req: SunarpRequest):
-    """Consulta vehicular en Sunarp (~3s), registra el vehículo vía webhook y
-    devuelve el `Veh_Id` generado en `vehiculoId`.
+    """Consulta vehicular en Sunarp (~3s) y devuelve los datos extraídos (`operacion: datos_vehiculo`,
+    `empresaId`, `vehiculo`). Con `SUNARP_WEBHOOK_ENABLED=true` además registra el vehículo vía webhook
+    y devuelve el `Veh_Id` en `vehiculoId`.
     Thread-safe: el pool (compartido con el modo async) asigna un cliente HTTP libre."""
     placa = req.placa.strip().upper()
     if not placa:
         raise HTTPException(status_code=400, detail="placa requerida")
     try:
-        return _procesar_sunarp(placa, req.empresaId, SUNARP_SYNC_WAIT_SECONDS)
+        if SUNARP_WEBHOOK_ENABLED:
+            return _procesar_sunarp(placa, req.empresaId, SUNARP_SYNC_WAIT_SECONDS)
+        return _consultar_sunarp_datos(placa, req.empresaId, SUNARP_SYNC_WAIT_SECONDS)
     except TimeoutError:
         raise HTTPException(
             status_code=503,
@@ -1002,6 +1033,45 @@ def _run_mtc_async_task(placa: str, vehiculoId: int, use_proxy: bool = False):
 
     t = threading.Thread(target=_work, daemon=True)
     t.start()
+
+
+_VEHICULO_CAMPOS = (
+    "Veh_NumeroPlaca", "Veh_NumeroVin", "Veh_NumeroMotor", "Veh_Color", "Veh_Marca", "Veh_Modelo",
+    "Veh_EstadoSunarp", "Veh_Sede", "Veh_Propietario1", "Veh_Propietario2", "Veh_Propietario3",
+)
+
+
+def _consultar_sunarp_datos(placa: str, empresaId: int, acquire_timeout: Optional[float]) -> dict:
+    """Flujo sincrono con el webhook apagado: scraping/OCR + parseo, SIN llamar al webhook ni
+    devolver `vehiculoId`. Lanza TimeoutError si no hay cliente libre dentro de `acquire_timeout`."""
+    result = _get_sunarp_pool().consultar(placa, timeout=acquire_timeout)
+    if not result.get("placa"):
+        result["placa"] = placa
+    result["empresaId"] = empresaId
+    result["operacion"] = None
+    result["vehiculo"] = None
+
+    def _fail(msg: str):
+        result["success"] = False
+        result["error"] = msg
+        return result
+
+    if not result.get("success"):
+        return result
+    ocr_error = result.pop("ocr_error", None)
+    if ocr_error:
+        return _fail(ocr_error)  # Tesseract no instalado
+    ocr_text = result.get("ocr_text") or ""
+    if not ocr_text.strip():
+        return _fail("OCR vacío: no se pudo leer la tarjeta vehicular")
+    parsed = parse_ocr_text(ocr_text, empresaId, placa)
+    if not tiene_datos(parsed):
+        return _fail("Texto OCR sin datos de vehículo")
+    if not (parsed["Veh_NumeroPlaca"] and parsed["Veh_Marca"] and parsed["Veh_Modelo"]):
+        return _fail("Datos de vehículo incompletos: falta marca o modelo")
+    result["operacion"] = "datos_vehiculo"
+    result["vehiculo"] = {k: parsed[k] for k in _VEHICULO_CAMPOS}
+    return result
 
 
 def _procesar_sunarp(placa: str, empresaId: int, acquire_timeout: Optional[float]) -> dict:

@@ -25,6 +25,10 @@ WEBHOOK_SUNARP_TOKEN = os.getenv("WEBHOOK_SUNARP_TOKEN", "")
 # Reintentos del INSERT (solo timeout / 5xx). 0 hasta confirmar el UNIQUE (Veh_NumeroPlaca, Veh_EmpId).
 WEBHOOK_SUNARP_INSERT_RETRIES = max(0, min(2, int(os.getenv("WEBHOOK_SUNARP_INSERT_RETRIES", "0"))))
 
+# Si es false, el flujo SINCRONO de Sunarp no llama al webhook insertar_vehiculo: devuelve los datos
+# extraidos (operacion "datos_vehiculo") sin vehiculoId. WEBHOOK_SUNARP_URL solo hace falta si es true.
+SUNARP_WEBHOOK_ENABLED = os.getenv("SUNARP_WEBHOOK_ENABLED", "false").strip().lower() in ("1", "true", "yes", "si")
+
 # Pool de clientes Sunarp compartido por sync y async.
 SUNARP_POOL_SIZE = max(1, int(os.getenv("SUNARP_POOL_SIZE", "5")))
 # Segundos que un request sync espera un cliente libre antes de responder 503.
