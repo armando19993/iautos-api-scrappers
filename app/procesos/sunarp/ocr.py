@@ -12,14 +12,14 @@ import os
 import pytesseract
 from PIL import Image
 
-from config import (
+from app.core.config import (
     TESSERACT_CMD,
     SUNARP_OCR_PREPROCESS,
     SUNARP_OCR_SCALE,
     SUNARP_OCR_THRESHOLD,
     SUNARP_OCR_PSM,
 )
-from sunarp_parser import parse_ocr_text, puntaje
+from app.procesos.sunarp.parser import parse_ocr_text, puntaje
 
 
 class TesseractNoInstalado(RuntimeError):

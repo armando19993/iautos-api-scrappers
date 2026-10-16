@@ -5,10 +5,10 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from captcha_solver import CaptchaSolver
-from config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES, MTC_BASE_URL
-from scraper import ProxyForwarder
-from chrome_utils import create_driver
+from app.compartido.captcha import CaptchaSolver
+from app.core.config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES, MTC_BASE_URL
+from app.compartido.proxy_forwarder import ProxyForwarder
+from app.compartido.chrome import create_driver
 
 
 class MTCScraper:

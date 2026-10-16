@@ -12,12 +12,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-from scraper import SOATScraper
-from mtc_scraper import MTCScraper
-from sunarp_api import SunarpHTTP
-from webhook import send_to_webhook, send_sunarp_webhook
-from config import SUNARP_POOL_SIZE, SUNARP_SYNC_WAIT_SECONDS, SUNARP_WEBHOOK_ENABLED, WEBHOOK_SUNARP_INSERT_RETRIES
-from sunarp_parser import parse_ocr_text, tiene_datos
+from app.procesos.soat.scraper import SOATScraper
+from app.procesos.mtc.scraper import MTCScraper
+from app.procesos.sunarp.cliente_http import SunarpHTTP
+from app.compartido.webhook import send_to_webhook, send_sunarp_webhook
+from app.core.config import SUNARP_POOL_SIZE, SUNARP_SYNC_WAIT_SECONDS, SUNARP_WEBHOOK_ENABLED, WEBHOOK_SUNARP_INSERT_RETRIES
+from app.procesos.sunarp.parser import parse_ocr_text, tiene_datos
 
 
 class SunarpHTTPPool:

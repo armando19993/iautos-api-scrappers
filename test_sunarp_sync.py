@@ -3,7 +3,7 @@ import httpx
 from fastapi.testclient import TestClient
 
 import api
-import webhook
+import app.compartido.webhook as webhook
 from test_sunarp_parser import REAL
 
 LLAMADAS_HTTP = []

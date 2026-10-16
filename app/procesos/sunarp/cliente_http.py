@@ -5,9 +5,9 @@ import io
 import httpx
 from PIL import Image
 
-from config import CAPSOLVER_API_KEY, SUNARP_URL
-from captcha_solver import CaptchaSolver
-from sunarp_ocr import ocr_tarjeta, TesseractNoInstalado
+from app.core.config import CAPSOLVER_API_KEY, SUNARP_URL
+from app.compartido.captcha import CaptchaSolver
+from app.procesos.sunarp.ocr import ocr_tarjeta, TesseractNoInstalado
 
 # ── Endpoints y constantes ──
 API_URL = "https://api-gateway.sunarp.gob.pe:9443/sunarp/multiservicios/multiservicio-consvehicular/consulta/getDatosVehiculo"

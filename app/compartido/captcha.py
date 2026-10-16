@@ -1,6 +1,6 @@
 import time
 import httpx
-from config import CAPSOLVER_API_KEY
+from app.core.config import CAPSOLVER_API_KEY
 
 
 class CaptchaSolver:

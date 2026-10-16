@@ -1,8 +1,8 @@
 import argparse
 import json
-from scraper import SOATScraper
-from mtc_scraper import MTCScraper
-from sunarp_scraper import SunarpScraper
+from app.procesos.soat.scraper import SOATScraper
+from app.procesos.mtc.scraper import MTCScraper
+from app.procesos.sunarp.scraper_selenium import SunarpScraper
 
 
 def main():

@@ -1,5 +1,5 @@
 """Pruebas del parser OCR de Sunarp. Uso: python test_sunarp_parser.py"""
-from sunarp_parser import parse_ocr_text, tiene_datos
+from app.procesos.sunarp.parser import parse_ocr_text, tiene_datos
 
 INLINE = """DATOS DEL VEHÍCULO
 Nº PLACA: AXY340

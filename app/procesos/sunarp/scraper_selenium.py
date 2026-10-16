@@ -11,9 +11,9 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from PIL import Image
 import pytesseract
 
-from config import CAPSOLVER_API_KEY, SUNARP_URL
-from captcha_solver import CaptchaSolver
-from chrome_utils import create_driver
+from app.core.config import CAPSOLVER_API_KEY, SUNARP_URL
+from app.compartido.captcha import CaptchaSolver
+from app.compartido.chrome import create_driver
 
 # ── Configurar ruta de Tesseract para Windows ──
 _tesseract_paths = [

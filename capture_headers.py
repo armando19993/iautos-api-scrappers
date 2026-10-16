@@ -1,6 +1,6 @@
 import undetected_chromedriver as uc
 import json, time
-from chrome_utils import create_driver
+from app.compartido.chrome import create_driver
 
 options = uc.ChromeOptions()
 options.add_argument("--headless=new")

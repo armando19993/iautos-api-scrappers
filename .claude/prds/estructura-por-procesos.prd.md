@@ -53,7 +53,7 @@ el comportamiento de la API**: mismas rutas, métodos, parámetros, modelos y re
 | Hito | Descripción | Plan | Estado |
 |---|---|---|---|
 | H0 | Rama de trabajo + test de contrato (línea base) | `.claude/plans/h0-linea-base.plan.md` | Completado |
-| H1 | Mover y renombrar módulos por proceso (sin partir `api.py`) | `.claude/plans/h1-mover-modulos.plan.md` | Aprobado, pendiente |
+| H1 | Mover y renombrar módulos por proceso (sin partir `api.py`) | `.claude/plans/h1-mover-modulos.plan.md` | Completado |
 | H2 | Partir `api.py` en rutas/schemas/servicios por proceso | `.claude/plans/h2-partir-api.plan.md` | Aprobado, pendiente |
 | H3 | Scripts, tests, despliegue y documentación | `.claude/plans/h3-despliegue-docs.plan.md` | Aprobado, pendiente |
 | H4 | (Opcional) Guardarraíles del equipo: CI, plantilla de PR, protección de `main`, secretos a env | — | Fuera de alcance (decisión 16/10/2026) |

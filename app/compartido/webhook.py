@@ -2,7 +2,7 @@ import time
 
 import httpx
 
-from config import WEBHOOK_SUNARP_URL, WEBHOOK_SUNARP_TOKEN
+from app.core.config import WEBHOOK_SUNARP_URL, WEBHOOK_SUNARP_TOKEN
 
 WEBHOOK_SOAT_URL = "https://api-next.iautos.pe/api/v1/soat/webhook"
 WEBHOOK_MTC_URL = "https://api-next.iautos.pe/api/v1/revision-tecnica/webhook"

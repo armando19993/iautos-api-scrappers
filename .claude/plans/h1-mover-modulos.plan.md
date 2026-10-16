@@ -1,7 +1,7 @@
 # Plan H1 · Mover y renombrar módulos por proceso
 
 PRD: `.claude/prds/estructura-por-procesos.prd.md` · ADR: `docs/adr/0001-estructura-por-procesos.md`
-Estado: **Aprobado — pendiente de ejecución**
+Estado: **Completado (16/10/2026)**
 
 Objetivo: cada archivo de lógica pasa a su paquete con un nombre que dice qué es. `api.py`
 todavía no se parte: solo cambia sus imports.
@@ -28,13 +28,23 @@ Cada carpeta lleva `__init__.py`. Imports absolutos: `from app.compartido.captch
 
 | # | Tarea | Validación | Estado |
 |---|---|---|---|
-| 1.1 | Crear paquetes `app/`, `app/core/`, `app/compartido/`, `app/procesos/{soat,mtc,sunarp}/` | `python -c "import app"` | Pendiente |
-| 1.2 | `git mv` de los módulos 1 a 1 según el mapa | `git status` muestra `renamed:` | Pendiente |
-| 1.3 | Separar `ProxyForwarder` de `scraper.py` a `compartido/proxy_forwarder.py` (copia literal) | Diff solo de ubicación | Pendiente |
-| 1.4 | Actualizar imports en todos los módulos, `api.py`, `main.py` y los tests | `python -m compileall app` y import de cada módulo | Pendiente |
-| 1.5 | Ajustar los parches de `test_sunarp_ocr.py` (`sunarp_ocr.*` → `app.procesos.sunarp.ocr.*`) | Test pasa y falla si se quita el parche | Pendiente |
-| 1.6 | Correr test de contrato + 3 tests existentes | Todo en verde, snapshot sin cambios | Pendiente |
-| 1.7 | Commit `refactor: mover modulos a paquetes por proceso` | — | Pendiente |
+| 1.1 | Crear paquetes `app/`, `app/core/`, `app/compartido/`, `app/procesos/{soat,mtc,sunarp}/` | `python -c "import app"` | Hecho |
+| 1.2 | `git mv` de los módulos 1 a 1 según el mapa | `git status` muestra 10 `renamed` | Hecho |
+| 1.3 | Separar `ProxyForwarder` de `scraper.py` a `compartido/proxy_forwarder.py` (copia literal) | 178 líneas movidas literal; SOAT y MTC usan la misma clase | Hecho |
+| 1.4 | Actualizar imports en todos los módulos, `api.py`, `main.py` y los tests | compileall OK; 13 módulos importan; `.env` se sigue cargando | Hecho |
+| 1.5 | Ajustar los parches de `test_sunarp_ocr.py` (`sunarp_ocr.*` → `app.procesos.sunarp.ocr.*`) | Alias `import app.procesos.sunarp.ocr as sunarp_ocr` / `app.compartido.webhook as webhook`: parches sobre el módulo real; mutante sin parche del pool falla | Hecho |
+| 1.6 | Correr test de contrato + 3 tests existentes | Contrato igual; parser 9 · ocr 14 · sync 18 ok | Hecho |
+| 1.7 | Commit `refactor: mover modulos a paquetes por proceso` | — | Hecho |
 
 ## Fuera de este hito
 - Partir `api.py` (H2). Mover scripts/tests/docs (H3).
+
+## Resultado
+
+- 10 módulos movidos con `git mv` (historial conservado) + `ProxyForwarder` separado a
+  `app/compartido/proxy_forwarder.py`.
+- 36 imports actualizados en `app/`, `api.py`, `main.py`, scripts y tests.
+- En `app/procesos/soat/scraper.py` se quitaron `select` y `threading` (solo los usaba
+  `ProxyForwarder`). `asyncio` y `struct` ya estaban sin uso antes; se dejan para no mezclar
+  limpiezas con el movimiento.
+- Pendiente para H3: comentarios/docstrings que todavía nombran los módulos viejos.

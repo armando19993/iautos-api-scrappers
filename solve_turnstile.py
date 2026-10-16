@@ -1,6 +1,6 @@
 import requests
 import time
-from config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES
+from app.core.config import CAPSOLVER_API_KEY, CAPSOLVER_PROXIES
 
 
 API_URL = "https://api.capsolver.com"

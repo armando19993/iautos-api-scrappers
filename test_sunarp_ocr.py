@@ -2,7 +2,7 @@
 import pytesseract
 from PIL import Image
 
-import sunarp_ocr
+import app.procesos.sunarp.ocr as sunarp_ocr
 from test_sunarp_parser import REAL
 
 img = Image.new("RGB", (100, 50), "white")

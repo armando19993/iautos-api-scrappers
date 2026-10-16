@@ -6,7 +6,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from scraper import SOATScraper
+from app.procesos.soat.scraper import SOATScraper
 
 PLACA = sys.argv[1] if len(sys.argv) > 1 else "ABC123"
 TOTAL = int(sys.argv[2]) if len(sys.argv) > 2 else 16
