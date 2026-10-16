@@ -1,5 +1,28 @@
+# Entornos
+.venv/
+venv/
+env/
+
+# Secretos
 .env
+.env.*
+!.env.example
+
+# Python
 __pycache__/
 *.pyc
+
+# Logs 
 resultados.json
 *.log
+
+# Scripts locales de prueba
+scripts/probar_ocr.py
+scripts/mock_receptor.py
+
+# Editor / sistema
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.claude/settings.local.json

@@ -89,9 +89,7 @@ def parse_ocr_text(ocr_text: str, empresa_id: int, placa: str) -> dict:
             if _DATE_RE.search(line):
                 break
             if not line:
-                if owners:
-                    break  # linea vacia tras los propietarios: fin de la seccion
-                continue
+                continue  # Tesseract (psm 6/4) puede intercalar lineas vacias entre propietarios
             owner = _clean_owner(line)
             if owner and len(owner) >= 2:
                 owners.append(line)

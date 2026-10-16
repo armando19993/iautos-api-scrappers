@@ -128,7 +128,16 @@ v = parse_ocr_text("n* placa: ZZZ999\nNe vin: abc\nn° Motor : m1\nplacavigente:
 assert v["Veh_NumeroPlaca"] == "AAA111" and v["Veh_NumeroVin"] == "ABC" and v["Veh_NumeroMotor"] == "M1" and v["Veh_Marca"] == "KIA"
 print("ok etiquetas tolerantes")
 
-# linea vacia corta la seccion de propietarios
-v = parse_ocr_text("MARCA: X\nPROPIETARIO(S):\nA B, C\n\nRUIDO FINAL", 1, "AAA111")
-assert v["Veh_Propietario1"] == "A B C" and v["Veh_Propietario2"] == "SIN INFORMACION"
-print("ok linea vacia corta propietarios")
+# lineas vacias intercaladas entre propietarios (salida real de Tesseract psm 6 con preprocesado):
+# los 3 propietarios deben leerse; la seccion termina en la fecha/hora
+con_vacias = REAL
+for linea in ("GOMEZ GONZALES", "GOMEZ SICCHA", "SICCHA MACASSI", "15/10/2026"):
+    con_vacias = con_vacias.replace("\n" + linea, "\n\n" + linea)
+got = parse_ocr_text(con_vacias, 7, "abc123")
+assert got == ESPERADO_REAL, got
+print("ok propietarios separados por lineas vacias")
+
+# 2 propietarios con lineas vacias: el tercero queda SIN INFORMACION y la fecha no cuenta
+v = parse_ocr_text("MARCA: X\nPROPIETARIO(S):\n\nA B, C\n\nD E, F\n\n16/10/2026 11:02:32", 1, "AAA111")
+assert (v["Veh_Propietario1"], v["Veh_Propietario2"], v["Veh_Propietario3"]) == ("A B C", "D E F", "SIN INFORMACION")
+print("ok 2 propietarios con lineas vacias")
