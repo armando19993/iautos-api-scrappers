@@ -1,0 +1,2127 @@
+{
+  "openapi": {
+    "openapi": "3.1.0",
+    "info": {
+      "title": "Api Scrappers IAUTOS",
+      "description": "API de scrapers de **IAUTOS** para consultar información oficial de vehículos\nen el Perú a partir de la **placa**.\n\nReúne tres fuentes en una sola API:\n\n| Fuente | Qué entrega | Endpoint | Tiempo aprox. |\n|--------|-------------|----------|---------------|\n| **SOAT** (APESEG) | Certificado SOAT vigente + captura | `POST /soat` | ~30–40 s |\n| **CITV** (MTC) | Revisión técnica vigente + captura | `POST /mtc` | ~10–15 s |\n| **Registro vehicular** (Sunarp) | Tarjeta de identificación + OCR | `POST /sunarp` | ~3 s |\n\n## Modos de ejecución\n\nCada fuente ofrece dos modos:\n\n- **Síncrono** (`POST /soat`, `/mtc`, `/sunarp`): la petición **bloquea** hasta\n  obtener el resultado y lo devuelve en el cuerpo de la respuesta.\n- **Asíncrono** (`/soat/async`, `/mtc/async`, `/sunarp/async`): responde de\n  inmediato con `202`/`accepted` y procesa en segundo plano; al terminar\n  **envía el resultado al webhook** de IAUTOS.\n\nTambién existen **atajos GET** (`GET /soat/{placa}?vehiculoId=42`) pensados para\npruebas rápidas desde el navegador.\n\n## Captcha y webhook\n\n- Los captchas (reCAPTCHA / Cloudflare Turnstile) se resuelven automáticamente\n  mediante **CapSolver**.\n- Al finalizar, el resultado de SOAT y MTC se reenvía al webhook configurado en\n  IAUTOS (`send_to_webhook`).\n\n## Convención de respuestas\n\nTodas las consultas devuelven un objeto JSON con el campo booleano **`success`**:\n\n- `success: true`  → se obtuvieron los datos (ver el bloque correspondiente).\n- `success: false` → no se pudo obtener el dato; el motivo va en **`error`**.\n  Nota: una consulta fallida se devuelve con **HTTP 200** y `success:false`,\n  no como un error HTTP. Los códigos `4xx`/`5xx` se reservan para errores de la\n  propia petición (placa faltante, validación, fallo interno).",
+      "contact": {
+        "name": "IAUTOS",
+        "url": "https://next.iautos.pe/"
+      },
+      "license": {
+        "name": "Uso privado — IAUTOS"
+      },
+      "version": "1.2.0",
+      "x-logo": {
+        "url": "https://next.iautos.pe/logo.svg",
+        "altText": "IAUTOS",
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "servers": [
+      {
+        "url": "http://localhost:8000",
+        "description": "Local (desarrollo)"
+      },
+      {
+        "url": "http://200.234.233.170:8000",
+        "description": "Producción"
+      }
+    ],
+    "paths": {
+      "/": {
+        "get": {
+          "tags": [
+            "Sistema"
+          ],
+          "summary": "Índice de la API",
+          "operationId": "root__get",
+          "responses": {
+            "200": {
+              "description": "Enlace a la documentación y mapa de endpoints.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/RootResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/health": {
+        "get": {
+          "tags": [
+            "Sistema"
+          ],
+          "summary": "Health check",
+          "operationId": "health_health_get",
+          "responses": {
+            "200": {
+              "description": "Estado del servicio.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HealthResponse"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/soat": {
+        "post": {
+          "tags": [
+            "SOAT"
+          ],
+          "summary": "Consultar SOAT (síncrono)",
+          "description": "Modo síncrono: bloquea hasta tener el resultado del SOAT y lo retorna.\nTambién envía el resultado al webhook de IAUTOS.",
+          "operationId": "soat_sync_soat_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoatRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Consulta completada. Revise `success` para saber si hubo datos.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SoatResponse"
+                  },
+                  "examples": {
+                    "exito": {
+                      "summary": "SOAT encontrado",
+                      "value": {
+                        "success": true,
+                        "placa": "ABC123",
+                        "soat": {
+                          "Placa": "ABC123",
+                          "Aseguradora": "LA POSITIVA SEGUROS",
+                          "Estado": "VIGENTE",
+                          "FechaInicio": "01/01/2025",
+                          "FechaFin": "01/01/2026"
+                        },
+                        "screenshot_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg...",
+                        "tiempo_segundos": 34.2,
+                        "vehiculoId": 42,
+                        "webhook": {
+                          "status": "ok"
+                        }
+                      }
+                    },
+                    "sin_resultado": {
+                      "summary": "No se obtuvo el SOAT",
+                      "value": {
+                        "success": false,
+                        "placa": "ABC123",
+                        "error": "Maximo de 10 intentos sin resultado exitoso",
+                        "tiempo_segundos": 45.0,
+                        "vehiculoId": 42,
+                        "webhook": {
+                          "status": "ok"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  },
+                  "example": {
+                    "detail": "placa requerida"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Error de validación: falta un campo requerido o tiene un tipo incorrecto.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": [
+                      {
+                        "type": "missing",
+                        "loc": [
+                          "body",
+                          "vehiculoId"
+                        ],
+                        "msg": "Field required",
+                        "input": {
+                          "placa": "ABC123"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Error interno: fallo inesperado del scraper o del navegador.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  },
+                  "example": {
+                    "detail": "Internal Server Error"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/soat/async": {
+        "post": {
+          "tags": [
+            "SOAT"
+          ],
+          "summary": "Consultar SOAT (asíncrono)",
+          "description": "Encola la consulta en segundo plano y responde de inmediato.\nAl finalizar, el resultado se envía al webhook de IAUTOS.",
+          "operationId": "soat_async_soat_async_post",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoatRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Tarea aceptada y encolada.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AsyncAcceptedResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "placa requerida"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Error de validación: falta un campo requerido o tiene un tipo incorrecto.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": [
+                      {
+                        "type": "missing",
+                        "loc": [
+                          "body",
+                          "vehiculoId"
+                        ],
+                        "msg": "Field required",
+                        "input": {
+                          "placa": "ABC123"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "get": {
+          "tags": [
+            "SOAT"
+          ],
+          "summary": "Consultar SOAT (asíncrono, vía GET)",
+          "operationId": "soat_async_get_soat_async_get",
+          "parameters": [
+            {
+              "name": "placa",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Placa"
+              }
+            },
+            {
+              "name": "vehiculoId",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "title": "Vehiculoid"
+              }
+            },
+            {
+              "name": "use_proxy",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "boolean",
+                "default": false,
+                "title": "Use Proxy"
+              }
+            },
+            {
+              "name": "headless",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "boolean",
+                "default": true,
+                "title": "Headless"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Tarea aceptada y encolada.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AsyncAcceptedResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "placa requerida"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/soat/{placa}": {
+        "get": {
+          "tags": [
+            "SOAT"
+          ],
+          "summary": "Consultar SOAT (atajo GET)",
+          "description": "Atajo GET para probar rápido desde el navegador.\nEj: `GET /soat/ABC123?vehiculoId=42`",
+          "operationId": "soat_sync_get_soat__placa__get",
+          "parameters": [
+            {
+              "name": "placa",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Placa"
+              }
+            },
+            {
+              "name": "vehiculoId",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "title": "Vehiculoid"
+              }
+            },
+            {
+              "name": "use_proxy",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "boolean",
+                "default": false,
+                "title": "Use Proxy"
+              }
+            },
+            {
+              "name": "headless",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "boolean",
+                "default": true,
+                "title": "Headless"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Consulta completada.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SoatResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "placa requerida"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Error interno: fallo inesperado del scraper o del navegador.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "Internal Server Error"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/mtc": {
+        "post": {
+          "tags": [
+            "MTC"
+          ],
+          "summary": "Consultar CITV (síncrono)",
+          "description": "Consulta CITV en MTC. Usa navegador headless + CapSolver.\nRetorna el certificado y una captura de pantalla del resultado.",
+          "operationId": "mtc_sync_mtc_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MtcRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Consulta completada. Revise `success` para saber si hubo datos.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/MtcResponse"
+                  },
+                  "examples": {
+                    "exito": {
+                      "summary": "CITV encontrado",
+                      "value": {
+                        "success": true,
+                        "placa": "ABC123",
+                        "fuente": "MTC_CITV",
+                        "ultimo_documento": {
+                          "empresa_certificadora": "REVISIONES TECNICAS DEL PERU S.A.",
+                          "direccion": "AV. EJEMPLO 123, LIMA",
+                          "placa": "ABC123",
+                          "nro_certificado": "12345-2025",
+                          "tipo_documento": "CITV",
+                          "vigente_desde": "01/01/2025",
+                          "vigente_hasta": "01/01/2026",
+                          "resultado_inspeccion": "APROBADO",
+                          "estado": "VIGENTE",
+                          "ambito": "NACIONAL",
+                          "tipo_servicio": "PARTICULAR",
+                          "observaciones": ""
+                        },
+                        "documentos_completos": [],
+                        "screenshot_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg...",
+                        "tiempo_segundos": 12.3,
+                        "vehiculoId": 42,
+                        "webhook": {
+                          "status": "ok"
+                        }
+                      }
+                    },
+                    "sin_resultado": {
+                      "summary": "No se encontró CITV",
+                      "value": {
+                        "success": false,
+                        "placa": "ABC123",
+                        "error": "No se encontraron certificados",
+                        "screenshot_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg...",
+                        "vehiculoId": 42,
+                        "webhook": {
+                          "status": "ok"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  },
+                  "example": {
+                    "detail": "placa requerida"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Error de validación: falta un campo requerido o tiene un tipo incorrecto.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": [
+                      {
+                        "type": "missing",
+                        "loc": [
+                          "body",
+                          "vehiculoId"
+                        ],
+                        "msg": "Field required",
+                        "input": {
+                          "placa": "ABC123"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Error interno: fallo inesperado del scraper o del navegador.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  },
+                  "example": {
+                    "detail": "Internal Server Error"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/mtc/async": {
+        "post": {
+          "tags": [
+            "MTC"
+          ],
+          "summary": "Consultar CITV (asíncrono)",
+          "description": "Encola la consulta CITV en segundo plano y responde de inmediato.\nEl resultado incluye captura de pantalla.",
+          "operationId": "mtc_async_mtc_async_post",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MtcRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Tarea aceptada y encolada.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AsyncAcceptedResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "placa requerida"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Error de validación: falta un campo requerido o tiene un tipo incorrecto.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": [
+                      {
+                        "type": "missing",
+                        "loc": [
+                          "body",
+                          "vehiculoId"
+                        ],
+                        "msg": "Field required",
+                        "input": {
+                          "placa": "ABC123"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "get": {
+          "tags": [
+            "MTC"
+          ],
+          "summary": "Consultar CITV (asíncrono, vía GET)",
+          "operationId": "mtc_async_get_mtc_async_get",
+          "parameters": [
+            {
+              "name": "placa",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Placa"
+              }
+            },
+            {
+              "name": "vehiculoId",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "title": "Vehiculoid"
+              }
+            },
+            {
+              "name": "use_proxy",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "boolean",
+                "default": true,
+                "title": "Use Proxy"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Tarea aceptada y encolada.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AsyncAcceptedResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "placa requerida"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/mtc/{placa}": {
+        "get": {
+          "tags": [
+            "MTC"
+          ],
+          "summary": "Consultar CITV (atajo GET)",
+          "description": "Atajo GET para probar rápido.\nEj: `GET /mtc/ABC123?vehiculoId=42`",
+          "operationId": "mtc_sync_get_mtc__placa__get",
+          "parameters": [
+            {
+              "name": "placa",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Placa"
+              }
+            },
+            {
+              "name": "vehiculoId",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "title": "Vehiculoid"
+              }
+            },
+            {
+              "name": "use_proxy",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "boolean",
+                "default": true,
+                "title": "Use Proxy"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Consulta completada.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/MtcResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "placa requerida"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Error interno: fallo inesperado del scraper o del navegador.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "Internal Server Error"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/sunarp": {
+        "post": {
+          "tags": [
+            "Sunarp"
+          ],
+          "summary": "Consultar registro vehicular (síncrono)",
+          "description": "Consulta vehicular en Sunarp (~3s) y devuelve los datos extraídos (`operacion: datos_vehiculo`,\n`empresaId`, `vehiculo`). Con `SUNARP_WEBHOOK_ENABLED=true` además registra el vehículo vía webhook\ny devuelve el `Veh_Id` en `vehiculoId`.\nThread-safe: el pool (compartido con el modo async) asigna un cliente HTTP libre.",
+          "operationId": "sunarp_sync_sunarp_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SunarpRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Consulta completada. Revise `success` para saber si hubo datos.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SunarpResponse"
+                  },
+                  "examples": {
+                    "exito": {
+                      "summary": "Vehículo encontrado",
+                      "value": {
+                        "success": true,
+                        "placa": "ABC123",
+                        "result_image_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg...",
+                        "ocr_text": "PLACA: ABC123\nMARCA: TOYOTA\nMODELO: YARIS\nAÑO: 2020",
+                        "raw_response": {
+                          "model": {
+                            "imagen": "..."
+                          }
+                        },
+                        "tiempo_segundos": 3.1,
+                        "operacion": "datos_vehiculo",
+                        "empresaId": 3,
+                        "vehiculo": {
+                          "Veh_NumeroPlaca": "ABC123",
+                          "Veh_NumeroMotor": "262496256",
+                          "Veh_Color": "ROJO",
+                          "Veh_Marca": "TOYOTA",
+                          "Veh_Modelo": "YARIS",
+                          "Veh_EstadoSunarp": "EN CIRCULACION",
+                          "Veh_Sede": "LIMA",
+                          "Veh_Propietario1": "GOMEZ GONZALES JOSEPH",
+                          "Veh_Propietario2": "SIN INFORMACION",
+                          "Veh_Propietario3": "SIN INFORMACION"
+                        }
+                      }
+                    },
+                    "sin_resultado": {
+                      "summary": "No se obtuvo el registro",
+                      "value": {
+                        "success": false,
+                        "placa": "ABC123",
+                        "error": "HTTP 404: no se encontró el vehículo",
+                        "tiempo_segundos": 2.4,
+                        "empresaId": 3
+                      }
+                    },
+                    "insert_fallido": {
+                      "summary": "Scraping OK pero el webhook de inserción falló",
+                      "value": {
+                        "success": false,
+                        "placa": "ABC123",
+                        "error": "No se pudo registrar el vehículo: timeout",
+                        "ocr_text": "Nº PLACA: ABC123 ...",
+                        "tiempo_segundos": 3.4,
+                        "webhook": {
+                          "webhook_error": "timeout"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  },
+                  "example": {
+                    "detail": "placa requerida"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Error de validación: falta un campo requerido o tiene un tipo incorrecto.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": [
+                      {
+                        "type": "missing",
+                        "loc": [
+                          "body",
+                          "vehiculoId"
+                        ],
+                        "msg": "Field required",
+                        "input": {
+                          "placa": "ABC123"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Error interno: fallo inesperado del scraper o del navegador.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  },
+                  "example": {
+                    "detail": "Internal Server Error"
+                  }
+                }
+              }
+            },
+            "503": {
+              "description": "Todos los clientes Sunarp están ocupados; reintente en unos segundos.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  },
+                  "example": {
+                    "detail": "Servicio Sunarp saturado: sin cliente disponible, reintente en unos segundos"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/sunarp/async": {
+        "post": {
+          "tags": [
+            "Sunarp"
+          ],
+          "summary": "Consultar registro vehicular (asíncrono)",
+          "description": "Encola la consulta Sunarp en segundo plano y responde de inmediato (sin `vehiculoId`:\nlo genera el receptor del webhook al registrar el vehículo).",
+          "operationId": "sunarp_async_sunarp_async_post",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SunarpRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Tarea aceptada y encolada.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SunarpAsyncAcceptedResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "placa requerida"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Error de validación: falta un campo requerido o tiene un tipo incorrecto.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": [
+                      {
+                        "type": "missing",
+                        "loc": [
+                          "body",
+                          "vehiculoId"
+                        ],
+                        "msg": "Field required",
+                        "input": {
+                          "placa": "ABC123"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "get": {
+          "tags": [
+            "Sunarp"
+          ],
+          "summary": "Consultar registro vehicular (asíncrono, vía GET)",
+          "operationId": "sunarp_async_get_sunarp_async_get",
+          "parameters": [
+            {
+              "name": "placa",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Placa"
+              }
+            },
+            {
+              "name": "empresaId",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "maximum": 255,
+                "minimum": 0,
+                "title": "Empresaid"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Tarea aceptada y encolada.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SunarpAsyncAcceptedResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "placa requerida"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Error de validación: falta un campo requerido o tiene un tipo incorrecto.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": [
+                      {
+                        "type": "missing",
+                        "loc": [
+                          "body",
+                          "vehiculoId"
+                        ],
+                        "msg": "Field required",
+                        "input": {
+                          "placa": "ABC123"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/sunarp/{placa}": {
+        "get": {
+          "tags": [
+            "Sunarp"
+          ],
+          "summary": "Consultar registro vehicular (atajo GET)",
+          "description": "Atajo GET para probar rápido.\nEj: `GET /sunarp/ABC123?empresaId=3`",
+          "operationId": "sunarp_sync_get_sunarp__placa__get",
+          "parameters": [
+            {
+              "name": "placa",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Placa"
+              }
+            },
+            {
+              "name": "empresaId",
+              "in": "query",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "maximum": 255,
+                "minimum": 0,
+                "title": "Empresaid"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Consulta completada.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/SunarpResponse"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Petición inválida: la placa está vacía.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "placa requerida"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Error de validación: falta un campo requerido o tiene un tipo incorrecto.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": [
+                      {
+                        "type": "missing",
+                        "loc": [
+                          "body",
+                          "vehiculoId"
+                        ],
+                        "msg": "Field required",
+                        "input": {
+                          "placa": "ABC123"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Error interno: fallo inesperado del scraper o del navegador.",
+              "content": {
+                "application/json": {
+                  "example": {
+                    "detail": "Internal Server Error"
+                  },
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            },
+            "503": {
+              "description": "Todos los clientes Sunarp están ocupados.",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ErrorDetail"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "AsyncAcceptedResponse": {
+          "properties": {
+            "status": {
+              "type": "string",
+              "title": "Status",
+              "default": "accepted",
+              "examples": [
+                "accepted"
+              ]
+            },
+            "placa": {
+              "type": "string",
+              "title": "Placa",
+              "examples": [
+                "ABC123"
+              ]
+            },
+            "vehiculoId": {
+              "type": "integer",
+              "title": "Vehiculoid",
+              "examples": [
+                42
+              ]
+            },
+            "webhook": {
+              "type": "string",
+              "title": "Webhook",
+              "examples": [
+                "se enviara al terminar"
+              ]
+            }
+          },
+          "type": "object",
+          "required": [
+            "placa",
+            "vehiculoId",
+            "webhook"
+          ],
+          "title": "AsyncAcceptedResponse",
+          "description": "Acuse de recibo de una consulta asíncrona. El resultado llega por webhook."
+        },
+        "ErrorDetail": {
+          "properties": {
+            "detail": {
+              "type": "string",
+              "title": "Detail",
+              "examples": [
+                "placa requerida"
+              ]
+            }
+          },
+          "type": "object",
+          "required": [
+            "detail"
+          ],
+          "title": "ErrorDetail",
+          "description": "Error HTTP estándar de FastAPI (códigos 4xx/5xx)."
+        },
+        "HTTPValidationError": {
+          "properties": {
+            "detail": {
+              "items": {
+                "$ref": "#/components/schemas/ValidationError"
+              },
+              "type": "array",
+              "title": "Detail"
+            }
+          },
+          "type": "object",
+          "title": "HTTPValidationError"
+        },
+        "HealthResponse": {
+          "properties": {
+            "status": {
+              "type": "string",
+              "title": "Status",
+              "default": "ok",
+              "examples": [
+                "ok"
+              ]
+            }
+          },
+          "type": "object",
+          "title": "HealthResponse"
+        },
+        "MtcRequest": {
+          "properties": {
+            "placa": {
+              "type": "string",
+              "title": "Placa",
+              "description": "Placa del vehículo a consultar. Se normaliza a mayúsculas.",
+              "examples": [
+                "ABC123"
+              ]
+            },
+            "vehiculoId": {
+              "type": "integer",
+              "title": "Vehiculoid",
+              "description": "ID interno del vehículo en IAUTOS. Se reenvía en la respuesta y el webhook.",
+              "examples": [
+                42
+              ]
+            },
+            "use_proxy": {
+              "type": "boolean",
+              "title": "Use Proxy",
+              "description": "Si es `true`, enruta las peticiones HTTP por un proxy rotativo. Recomendado: el sitio MTC bloquea IPs de servidores.",
+              "default": true
+            }
+          },
+          "type": "object",
+          "required": [
+            "placa",
+            "vehiculoId"
+          ],
+          "title": "MtcRequest",
+          "examples": [
+            {
+              "placa": "ABC123",
+              "use_proxy": true,
+              "vehiculoId": 42
+            }
+          ]
+        },
+        "MtcResponse": {
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "title": "Success",
+              "description": "`true` si se obtuvo el certificado CITV."
+            },
+            "placa": {
+              "type": "string",
+              "title": "Placa",
+              "examples": [
+                "ABC123"
+              ]
+            },
+            "vehiculoId": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vehiculoid",
+              "examples": [
+                42
+              ]
+            },
+            "fuente": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Fuente",
+              "examples": [
+                "MTC_CITV"
+              ]
+            },
+            "ultimo_documento": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MtcUltimoDocumento"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Certificado CITV más reciente, con campos normalizados."
+            },
+            "documentos_completos": {
+              "anyOf": [
+                {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Documentos Completos",
+              "description": "Todos los documentos crudos devueltos por el MTC."
+            },
+            "screenshot_base64": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Screenshot Base64",
+              "description": "Captura de pantalla del resultado como base64 PNG."
+            },
+            "tiempo_segundos": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tiempo Segundos",
+              "examples": [
+                12.3
+              ]
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error",
+              "description": "Mensaje de error cuando `success` es `false`."
+            },
+            "webhook": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Webhook",
+              "description": "Respuesta devuelta por el webhook de IAUTOS."
+            }
+          },
+          "type": "object",
+          "required": [
+            "success",
+            "placa"
+          ],
+          "title": "MtcResponse",
+          "description": "Resultado de una consulta CITV (MTC)."
+        },
+        "MtcUltimoDocumento": {
+          "properties": {
+            "empresa_certificadora": {
+              "type": "string",
+              "title": "Empresa Certificadora",
+              "default": "",
+              "examples": [
+                "REVISIONES TECNICAS DEL PERU S.A."
+              ]
+            },
+            "direccion": {
+              "type": "string",
+              "title": "Direccion",
+              "default": ""
+            },
+            "placa": {
+              "type": "string",
+              "title": "Placa",
+              "default": "",
+              "examples": [
+                "ABC123"
+              ]
+            },
+            "nro_certificado": {
+              "type": "string",
+              "title": "Nro Certificado",
+              "default": "",
+              "examples": [
+                "12345-2025"
+              ]
+            },
+            "tipo_documento": {
+              "type": "string",
+              "title": "Tipo Documento",
+              "default": ""
+            },
+            "vigente_desde": {
+              "type": "string",
+              "title": "Vigente Desde",
+              "default": "",
+              "examples": [
+                "01/01/2025"
+              ]
+            },
+            "vigente_hasta": {
+              "type": "string",
+              "title": "Vigente Hasta",
+              "default": "",
+              "examples": [
+                "01/01/2026"
+              ]
+            },
+            "resultado_inspeccion": {
+              "type": "string",
+              "title": "Resultado Inspeccion",
+              "default": "",
+              "examples": [
+                "APROBADO"
+              ]
+            },
+            "estado": {
+              "type": "string",
+              "title": "Estado",
+              "default": "",
+              "examples": [
+                "VIGENTE"
+              ]
+            },
+            "ambito": {
+              "type": "string",
+              "title": "Ambito",
+              "default": ""
+            },
+            "tipo_servicio": {
+              "type": "string",
+              "title": "Tipo Servicio",
+              "default": ""
+            },
+            "observaciones": {
+              "type": "string",
+              "title": "Observaciones",
+              "default": ""
+            }
+          },
+          "type": "object",
+          "title": "MtcUltimoDocumento",
+          "description": "Último certificado CITV encontrado para la placa."
+        },
+        "RootResponse": {
+          "properties": {
+            "redoc": {
+              "type": "string",
+              "title": "Redoc",
+              "default": "/redoc",
+              "examples": [
+                "/redoc"
+              ]
+            },
+            "endpoints": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object",
+              "title": "Endpoints"
+            }
+          },
+          "type": "object",
+          "required": [
+            "endpoints"
+          ],
+          "title": "RootResponse"
+        },
+        "SoatRequest": {
+          "properties": {
+            "placa": {
+              "type": "string",
+              "title": "Placa",
+              "description": "Placa del vehículo a consultar. Se normaliza a mayúsculas.",
+              "examples": [
+                "ABC123"
+              ]
+            },
+            "vehiculoId": {
+              "type": "integer",
+              "title": "Vehiculoid",
+              "description": "ID interno del vehículo en IAUTOS. Se reenvía tal cual en la respuesta y en el webhook para correlacionar.",
+              "examples": [
+                42
+              ]
+            },
+            "use_proxy": {
+              "type": "boolean",
+              "title": "Use Proxy",
+              "description": "Si es `true`, enruta el scraping a través de un proxy rotativo.",
+              "default": false
+            },
+            "headless": {
+              "type": "boolean",
+              "title": "Headless",
+              "description": "Ejecuta Chrome en modo headless (sin ventana). Deja en `true` en servidor.",
+              "default": true
+            }
+          },
+          "type": "object",
+          "required": [
+            "placa",
+            "vehiculoId"
+          ],
+          "title": "SoatRequest",
+          "examples": [
+            {
+              "headless": true,
+              "placa": "ABC123",
+              "use_proxy": false,
+              "vehiculoId": 42
+            }
+          ]
+        },
+        "SoatResponse": {
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "title": "Success",
+              "description": "`true` si se obtuvo el certificado SOAT."
+            },
+            "placa": {
+              "type": "string",
+              "title": "Placa",
+              "examples": [
+                "ABC123"
+              ]
+            },
+            "vehiculoId": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vehiculoid",
+              "examples": [
+                42
+              ]
+            },
+            "soat": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Soat",
+              "description": "Certificado SOAT vigente más reciente (objeto crudo de APESEG). Si la placa no tiene certificados, contiene `{\"Estado\": \"SIN SOAT\"}`."
+            },
+            "estado": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Estado",
+              "description": "Estado del SOAT en la raíz de la respuesta. `SIN SOAT` cuando no hay certificados.",
+              "examples": [
+                "VIGENTE"
+              ]
+            },
+            "screenshot_base64": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Screenshot Base64",
+              "description": "Captura de pantalla del resultado como data URI PNG en base64."
+            },
+            "tiempo_segundos": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tiempo Segundos",
+              "examples": [
+                34.2
+              ]
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error",
+              "description": "Motivo. Aparece con `success:false` (fallo tecnico) o, tambien con `success:true`, cuando la pagina no tiene certificados para la placa (`soat:null`); en ese caso el texto se toma de la propia pagina (ej. `No se encontro la placa solicitada`)."
+            },
+            "webhook": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Webhook",
+              "description": "Respuesta devuelta por el webhook de IAUTOS."
+            }
+          },
+          "type": "object",
+          "required": [
+            "success",
+            "placa"
+          ],
+          "title": "SoatResponse",
+          "description": "Resultado de una consulta SOAT (`success` indica si hubo datos)."
+        },
+        "SunarpAsyncAcceptedResponse": {
+          "properties": {
+            "status": {
+              "type": "string",
+              "title": "Status",
+              "default": "accepted",
+              "examples": [
+                "accepted"
+              ]
+            },
+            "placa": {
+              "type": "string",
+              "title": "Placa",
+              "examples": [
+                "ABC123"
+              ]
+            }
+          },
+          "type": "object",
+          "required": [
+            "placa"
+          ],
+          "title": "SunarpAsyncAcceptedResponse",
+          "description": "Acuse de una consulta Sunarp asíncrona. El `vehiculoId` lo genera el receptor del webhook."
+        },
+        "SunarpRequest": {
+          "properties": {
+            "placa": {
+              "type": "string",
+              "title": "Placa",
+              "description": "Placa del vehículo a consultar. Se normaliza a mayúsculas.",
+              "examples": [
+                "ABC123"
+              ]
+            },
+            "empresaId": {
+              "type": "integer",
+              "maximum": 255.0,
+              "minimum": 0.0,
+              "title": "Empresaid",
+              "description": "ID de la empresa (`Veh_EmpId`, tinyint) a la que se asocia el vehículo.",
+              "examples": [
+                3
+              ]
+            }
+          },
+          "type": "object",
+          "required": [
+            "placa",
+            "empresaId"
+          ],
+          "title": "SunarpRequest",
+          "examples": [
+            {
+              "empresaId": 3,
+              "placa": "ABC123"
+            }
+          ]
+        },
+        "SunarpResponse": {
+          "properties": {
+            "success": {
+              "type": "boolean",
+              "title": "Success",
+              "description": "`true` si se obtuvo la tarjeta vehicular."
+            },
+            "placa": {
+              "type": "string",
+              "title": "Placa",
+              "examples": [
+                "ABC123"
+              ]
+            },
+            "operacion": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Operacion",
+              "description": "`datos_vehiculo` cuando el webhook está apagado (`SUNARP_WEBHOOK_ENABLED=false`); `null` si falló.",
+              "examples": [
+                "datos_vehiculo"
+              ]
+            },
+            "empresaId": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Empresaid",
+              "description": "Empresa recibida en la petición.",
+              "examples": [
+                3
+              ]
+            },
+            "vehiculo": {
+              "anyOf": [
+                {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vehiculo",
+              "description": "Datos parseados del OCR con las columnas `Veh_*` de la tabla `vehiculo` (sin `Veh_EmpId`). Campos vacíos = `null`; propietarios faltantes = `SIN INFORMACION`."
+            },
+            "vehiculoId": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vehiculoid",
+              "description": "Solo con `SUNARP_WEBHOOK_ENABLED=true`: `Veh_Id` devuelto por el webhook de inserción; `null` si no se pudo registrar. Con el webhook apagado no se incluye.",
+              "examples": [
+                42
+              ]
+            },
+            "result_image_base64": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Result Image Base64",
+              "description": "Tarjeta de identificación vehicular como data URI PNG en base64."
+            },
+            "ocr_text": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ocr Text",
+              "description": "Texto extraído por OCR (Tesseract) de la imagen."
+            },
+            "raw_response": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Raw Response",
+              "description": "Respuesta cruda de la API de Sunarp."
+            },
+            "tiempo_segundos": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tiempo Segundos",
+              "examples": [
+                3.1
+              ]
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error",
+              "description": "Mensaje de error cuando `success` es `false`."
+            },
+            "webhook": {
+              "anyOf": [
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Webhook",
+              "description": "Respuesta del webhook de inserción de vehículo."
+            }
+          },
+          "type": "object",
+          "required": [
+            "success",
+            "placa"
+          ],
+          "title": "SunarpResponse",
+          "description": "Resultado de una consulta vehicular en Sunarp."
+        },
+        "ValidationError": {
+          "properties": {
+            "loc": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array",
+              "title": "Location"
+            },
+            "msg": {
+              "type": "string",
+              "title": "Message"
+            },
+            "type": {
+              "type": "string",
+              "title": "Error Type"
+            },
+            "input": {
+              "title": "Input"
+            },
+            "ctx": {
+              "type": "object",
+              "title": "Context"
+            }
+          },
+          "type": "object",
+          "required": [
+            "loc",
+            "msg",
+            "type"
+          ],
+          "title": "ValidationError"
+        }
+      }
+    },
+    "tags": [
+      {
+        "name": "SOAT",
+        "description": "Consulta del **SOAT vigente** en APESEG (apeseg.org.pe). Usa navegador headless + CapSolver. Incluye captura de pantalla."
+      },
+      {
+        "name": "MTC",
+        "description": "Consulta de la **revisión técnica (CITV)** en el MTC (rec.mtc.gob.pe). Usa navegador headless + CapSolver. Incluye captura de pantalla."
+      },
+      {
+        "name": "Sunarp",
+        "description": "Consulta del **registro vehicular** en Sunarp (consultavehicular.sunarp.gob.pe). HTTP directo (~3 s) con OCR de la tarjeta de identificación vehicular."
+      },
+      {
+        "name": "Sistema",
+        "description": "Endpoints utilitarios: índice de la API y health check."
+      }
+    ]
+  },
+  "rutas": [
+    {
+      "path": "/openapi.json",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "en_schema": false
+    },
+    {
+      "path": "/docs",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "en_schema": false
+    },
+    {
+      "path": "/docs/oauth2-redirect",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "en_schema": false
+    },
+    {
+      "path": "/redoc",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "en_schema": false
+    },
+    {
+      "path": "/",
+      "methods": [
+        "GET"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/health",
+      "methods": [
+        "GET"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/soat",
+      "methods": [
+        "POST"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/soat/async",
+      "methods": [
+        "POST"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/soat/async",
+      "methods": [
+        "GET"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/soat/{placa}",
+      "methods": [
+        "GET"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/mtc",
+      "methods": [
+        "POST"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/mtc/async",
+      "methods": [
+        "POST"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/mtc/async",
+      "methods": [
+        "GET"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/mtc/{placa}",
+      "methods": [
+        "GET"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/sunarp",
+      "methods": [
+        "POST"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/sunarp/async",
+      "methods": [
+        "POST"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/sunarp/async",
+      "methods": [
+        "GET"
+      ],
+      "en_schema": true
+    },
+    {
+      "path": "/sunarp/{placa}",
+      "methods": [
+        "GET"
+      ],
+      "en_schema": true
+    }
+  ]
+}

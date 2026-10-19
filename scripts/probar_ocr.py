@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytesseract
 from PIL import Image
 
-import sunarp_ocr  # configura TESSERACT_CMD / TESSDATA_PREFIX
-from sunarp_parser import _LABEL_RE
+import app.procesos.sunarp.ocr as sunarp_ocr  # configura TESSERACT_CMD / TESSDATA_PREFIX
+from app.procesos.sunarp.parser import _LABEL_RE
 
 CAMPOS = ("SERIE", "MOTOR", "MODELO")
 ESCALA = 2
