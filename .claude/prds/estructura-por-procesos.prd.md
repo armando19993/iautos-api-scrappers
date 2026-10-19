@@ -5,7 +5,7 @@
 | Módulo | estructura-por-procesos |
 | Repo | `armando19993/iautos-api-scrappers` |
 | Redactado por | Armando Campos |
-| Estado | **Aprobado (16/10/2026) — en desarrollo** |
+| Estado | **Desarrollo completado (19/10/2026) — en revisión (PR a `main`)** |
 | Fecha | 16/10/2026 |
 
 ## 1. Problema
@@ -55,7 +55,7 @@ el comportamiento de la API**: mismas rutas, métodos, parámetros, modelos y re
 | H0 | Rama de trabajo + test de contrato (línea base) | `.claude/plans/h0-linea-base.plan.md` | Completado |
 | H1 | Mover y renombrar módulos por proceso (sin partir `api.py`) | `.claude/plans/h1-mover-modulos.plan.md` | Completado |
 | H2 | Partir `api.py` en rutas/schemas/servicios por proceso | `.claude/plans/h2-partir-api.plan.md` | Completado |
-| H3 | Scripts, tests, despliegue y documentación | `.claude/plans/h3-despliegue-docs.plan.md` | Completado salvo revisión y PR (3.8) |
+| H3 | Scripts, tests, despliegue y documentación | `.claude/plans/h3-despliegue-docs.plan.md` | Completado |
 | H4 | (Opcional) Guardarraíles del equipo: CI, plantilla de PR, protección de `main`, secretos a env | — | Fuera de alcance (decisión 16/10/2026) |
 
 ## 6. Línea base (medida el 16/10/2026 sobre `main` = `2088194`)
